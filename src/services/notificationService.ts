@@ -28,7 +28,10 @@ export class NotificationService {
 > ${this.escapeMarkdown(newText)}`;
 
     if (s3Key) {
-      notification += `\n\n🖼️ Чтобы получить медиафайл, используйте команду: \`/get_latest_media\``;
+      const command = "/get_latest_media";
+      notification += `\n\n🖼️ Чтобы получить медиафайл, используйте команду: \`${this.escapeForCode(
+        command
+      )}\``;
     }
 
     return notification;
@@ -58,7 +61,9 @@ export class NotificationService {
 
     if (s3Key) {
       const command = `/get_latest_media`;
-      notification += `\n\n🖼️ Медиафайл сохранен\\. Чтобы получить его, используйте команду: ${command}`;
+      notification += `\n\n🖼️ Медиафайл сохранен\\. Чтобы получить его, используйте команду: \`${this.escapeForCode(
+        command
+      )}\``;
     }
 
     return notification;
@@ -86,11 +91,14 @@ export class NotificationService {
       notification += `*Удалено ${index + 1}:*\n> ${this.escapeMarkdown(
         msg.text
       )}\n`;
-      if (msg.s3Key) {
-        const command = `/get_media ${msg.s3Key}`;
-        notification += `🖼️ Получить: \`${this.escapeForCode(command)}\`\n\n`;
-      }
     });
+
+    if (deletedMessages.some((msg) => msg.s3Key)) {
+      const command = "/get_latest_media";
+      notification += `\n🖼️ Некоторые сообщения содержали медиа\\. Чтобы получить последний файл, введите: \`${this.escapeForCode(
+        command
+      )}\``;
+    }
 
     return notification.trim();
   }

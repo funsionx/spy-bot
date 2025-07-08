@@ -7,7 +7,6 @@ import type { CachedMessage, BusinessMessage } from "../types/telegram.js";
  */
 export class MessageCacheService {
   private cache: NodeCache;
-  private readonly DEFAULT_TTL = 120; // 2 минуты в секундах
 
   constructor(ttlSeconds: number = 120) {
     this.cache = new NodeCache({

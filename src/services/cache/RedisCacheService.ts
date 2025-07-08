@@ -1,6 +1,7 @@
 import { createClient, RedisClientType } from "redis";
-import type { CachedMessage, BusinessMessage } from "../../types/telegram.js";
+import type { CachedMessage } from "../../types/telegram.js";
 import type { ICacheService } from "./ICacheService.js";
+import { Logger } from "../logger.js";
 
 /**
  * Реализация кэша с использованием Redis
@@ -10,6 +11,7 @@ export class RedisCacheService implements ICacheService {
   private ttlSeconds: number;
   private stats = { hits: 0, misses: 0 };
   private connected = false;
+  private logger = Logger.getInstance();
 
   constructor(ttlSeconds: number = 120, redisUrl?: string) {
     this.ttlSeconds = ttlSeconds;
@@ -21,20 +23,20 @@ export class RedisCacheService implements ICacheService {
 
     // Обработка ошибок
     this.client.on("error", (err: Error) => {
-      console.error("❌ Redis ошибка:", err);
+      this.logger.error("Redis ошибка:", err);
     });
 
     this.client.on("connect", () => {
-      console.log("🔗 Подключение к Redis...");
+      this.logger.info("Подключение к Redis...");
     });
 
     this.client.on("ready", () => {
-      console.log(`✅ Redis подключен с TTL: ${ttlSeconds}s`);
+      this.logger.info(`Redis подключен с TTL: ${ttlSeconds}s`);
       this.connected = true;
     });
 
     this.client.on("end", () => {
-      console.log("🔌 Redis отключен");
+      this.logger.info("Redis отключен");
       this.connected = false;
     });
   }
@@ -62,7 +64,7 @@ export class RedisCacheService implements ICacheService {
       ? `Медиафайл (S3: ${message.s3Key})`
       : `Текст: "${message.text?.slice(0, 50)}..."`;
 
-    console.log(`📝 Сообщение закэшировано (Redis): ${key} | ${logText}`);
+    this.logger.info(`Сообщение закэшировано (Redis): ${key} | ${logText}`);
   }
 
   async getCachedMessage(
@@ -81,15 +83,15 @@ export class RedisCacheService implements ICacheService {
 
       if (cached) {
         this.stats.hits++;
-        console.log(`✅ Сообщение найдено в Redis: ${key}`);
+        this.logger.info(`Сообщение найдено в Redis: ${key}`);
         return JSON.parse(cached) as CachedMessage;
       } else {
         this.stats.misses++;
-        console.log(`❌ Сообщение не найдено в Redis: ${key}`);
+        this.logger.warn(`Сообщение не найдено в Redis: ${key}`);
         return undefined;
       }
     } catch (error) {
-      console.error(`❌ Ошибка получения из Redis: ${key}`, error);
+      this.logger.error(`Ошибка получения из Redis: ${key}`, error);
       this.stats.misses++;
       return undefined;
     }
@@ -113,8 +115,8 @@ export class RedisCacheService implements ICacheService {
       }
     }
 
-    console.log(
-      `📥 Найдено ${messages.length} из ${messageIds.length} сообщений в Redis`
+    this.logger.info(
+      `Найдено ${messages.length} из ${messageIds.length} сообщений в Redis`
     );
     return messages;
   }
@@ -130,7 +132,7 @@ export class RedisCacheService implements ICacheService {
 
     const key = this.generateKey(businessConnectionId, chatId, messageId);
     await this.client.del(key);
-    console.log(`🗑️ Сообщение удалено из Redis: ${key}`);
+    this.logger.info(`Сообщение удалено из Redis: ${key}`);
   }
 
   async getStats(): Promise<{ keys: number; hits: number; misses: number }> {
@@ -147,7 +149,7 @@ export class RedisCacheService implements ICacheService {
         misses: this.stats.misses,
       };
     } catch (error) {
-      console.error("❌ Ошибка получения статистики Redis:", error);
+      this.logger.error("Ошибка получения статистики Redis:", error);
       return {
         keys: 0,
         hits: this.stats.hits,
@@ -168,9 +170,9 @@ export class RedisCacheService implements ICacheService {
         await this.client.del(keys);
       }
       this.stats = { hits: 0, misses: 0 };
-      console.log(`🧹 Redis кэш очищен (удалено ${keys.length} ключей)`);
+      this.logger.info(`Redis кэш очищен (удалено ${keys.length} ключей)`);
     } catch (error) {
-      console.error("❌ Ошибка очистки Redis кэша:", error);
+      this.logger.error("Ошибка очистки Redis кэша:", error);
     }
   }
 
@@ -178,6 +180,25 @@ export class RedisCacheService implements ICacheService {
     if (this.connected) {
       await this.client.quit();
     }
+  }
+
+  async setValue(
+    key: string,
+    value: string,
+    ttlSeconds: number
+  ): Promise<void> {
+    if (!this.connected) await this.connect();
+    await this.client.setEx(key, ttlSeconds, value);
+  }
+
+  async getValue(key: string): Promise<string | null> {
+    if (!this.connected) await this.connect();
+    return this.client.get(key);
+  }
+
+  async deleteValue(key: string): Promise<void> {
+    if (!this.connected) await this.connect();
+    await this.client.del(key);
   }
 
   private generateKey(

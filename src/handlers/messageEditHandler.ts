@@ -2,11 +2,13 @@ import type { Context } from "telegraf";
 import type { BusinessMessage } from "../types/telegram.js";
 import type { ICacheService } from "../services/cache/ICacheService.js";
 import { NotificationService } from "../services/notificationService.js";
+import { Logger } from "../services/logger.js";
 
 /**
  * Обработчик изменений сообщений через Telegram Business API
  */
 export class MessageEditHandler {
+  private logger = Logger.getInstance();
   constructor(private cacheService: ICacheService, private ownerId: number) {}
 
   /**
@@ -23,8 +25,8 @@ export class MessageEditHandler {
       const editedMessage = update.edited_business_message as BusinessMessage;
       await this.handleEditedMessage(ctx, editedMessage);
     } catch (error) {
-      console.error(
-        "❌ Ошибка при обработке отредактированного сообщения:",
+      this.logger.error(
+        "Ошибка при обработке отредактированного сообщения:",
         error
       );
     }
@@ -38,8 +40,8 @@ export class MessageEditHandler {
     editedMessage: BusinessMessage
   ): Promise<void> {
     try {
-      console.log(
-        `🔄 Обнаружено изменение сообщения ID: ${editedMessage.message_id}`
+      this.logger.info(
+        `Обнаружено изменение сообщения ID: ${editedMessage.message_id}`
       );
 
       // Ищем оригинальное сообщение в кэше
@@ -50,8 +52,8 @@ export class MessageEditHandler {
       );
 
       if (!originalMessage) {
-        console.log(
-          `⚠️ Оригинальное сообщение не найдено в кэше для ID: ${editedMessage.message_id}`
+        this.logger.warn(
+          `Оригинальное сообщение не найдено в кэше для ID: ${editedMessage.message_id}`
         );
 
         // Отправляем уведомление о том, что оригинал не найден
@@ -67,6 +69,15 @@ export class MessageEditHandler {
         return;
       }
 
+      // Сохраняем s3Key в специальный кэш, чтобы команда /get_latest_media указывала на него
+      if (originalMessage.s3Key) {
+        this.cacheService.setValue(
+          `${this.ownerId}:latest_media_key`,
+          originalMessage.s3Key,
+          120 // TTL 2 минуты
+        );
+      }
+
       const oldText = originalMessage.text || "";
       const newText =
         editedMessage.text ||
@@ -75,8 +86,8 @@ export class MessageEditHandler {
           : "");
 
       if (oldText === newText) {
-        console.log(
-          `📝 Текст сообщения ${editedMessage.message_id} не изменился, пропускаем`
+        this.logger.info(
+          `Текст сообщения ${editedMessage.message_id} не изменился, пропускаем`
         );
         return;
       }
@@ -111,11 +122,11 @@ export class MessageEditHandler {
       };
       await this.cacheService.cacheMessage(newCachedMessage);
 
-      console.log(
-        `✅ Уведомление об изменении отправлено для сообщения ID: ${editedMessage.message_id}`
+      this.logger.info(
+        `Уведомление об изменении отправлено для сообщения ID: ${editedMessage.message_id}`
       );
     } catch (error) {
-      console.error("❌ Ошибка при обработке измененного сообщения:", error);
+      this.logger.error("Ошибка при обработке измененного сообщения:", error);
     }
   }
 
@@ -132,7 +143,7 @@ export class MessageEditHandler {
         link_preview_options: { is_disabled: true },
       });
     } catch (error) {
-      console.error("❌ Ошибка отправки уведомления владельцу:", error);
+      this.logger.error("Ошибка отправки уведомления владельцу:", error);
 
       // Пробуем отправить без markdown, если есть проблемы с форматированием
       try {
@@ -141,8 +152,8 @@ export class MessageEditHandler {
           notification.replace(/[*_`[\]()~>#+=|{}.!-]/g, "")
         );
       } catch (fallbackError) {
-        console.error(
-          "❌ Критическая ошибка отправки уведомления:",
+        this.logger.error(
+          "Критическая ошибка отправки уведомления:",
           fallbackError
         );
       }

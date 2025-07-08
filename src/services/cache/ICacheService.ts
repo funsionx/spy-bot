@@ -1,4 +1,4 @@
-import type { CachedMessage, BusinessMessage } from "../../types/telegram";
+import type { CachedMessage } from "../../types/telegram";
 
 /**
  * Интерфейс для сервиса кэширования сообщений
@@ -50,4 +50,19 @@ export interface ICacheService {
    * Закрывает соединение с кэшем (для Redis)
    */
   disconnect(): Promise<void>;
+
+  /**
+   * Устанавливает простое значение ключ-значение с TTL
+   */
+  setValue(key: string, value: string, ttlSeconds: number): Promise<void>;
+
+  /**
+   * Получает простое значение по ключу
+   */
+  getValue(key: string): Promise<string | null>;
+
+  /**
+   * Удаляет значение по ключу
+   */
+  deleteValue(key: string): Promise<void>;
 }

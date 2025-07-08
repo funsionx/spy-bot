@@ -3,18 +3,20 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
+  DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Telegraf } from "telegraf";
 import { Message } from "telegraf/types";
 import moment from "moment";
 import path from "path";
 import { Readable } from "stream";
+import { Logger } from "./logger";
 
 export class S3Service {
   private s3: S3Client;
   private bucketName: string;
   private bot: Telegraf<any>;
+  private logger = Logger.getInstance();
 
   constructor(bot: Telegraf<any>) {
     if (
@@ -37,7 +39,7 @@ export class S3Service {
     });
     this.bucketName = process.env.S3_BUCKET;
     this.bot = bot;
-    console.log("✅ S3 Service инициализирован");
+    this.logger.info("S3 Service инициализирован");
   }
 
   /**
@@ -69,7 +71,7 @@ export class S3Service {
         path.extname(new URL(fileLink.href).pathname) || ".dat";
       const mediaType = this.getMediaType(message);
       const timestamp = moment().format("HH-mm-ss_DD-MM-YYYY");
-      const s3Key = `${message.from.id}/${timestamp}_${mediaType}${fileExtension}`;
+      const s3Key = `spy-bot-media/${message.from.id}/${timestamp}_${mediaType}${fileExtension}`;
 
       const putCommand = new PutObjectCommand({
         Bucket: this.bucketName,
@@ -80,10 +82,10 @@ export class S3Service {
       });
 
       await this.s3.send(putCommand);
-      console.log(`✅ Файл успешно загружен в S3: ${s3Key}`);
+      this.logger.info(`Файл успешно загружен в S3: ${s3Key}`);
       return s3Key;
     } catch (error) {
-      console.error("❌ Ошибка при загрузке файла в S3:", error);
+      this.logger.error("Ошибка при загрузке файла в S3:", error);
       return null;
     }
   }
@@ -109,8 +111,24 @@ export class S3Service {
       }
       return null;
     } catch (error) {
-      console.error(`❌ Ошибка при получении файла из S3 ${key}:`, error);
+      this.logger.error(`Ошибка при получении файла из S3 ${key}:`, error);
       return null;
+    }
+  }
+
+  /**
+   * Удаляет файл из S3
+   */
+  async deleteFile(key: string): Promise<void> {
+    try {
+      const command = new DeleteObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+      await this.s3.send(command);
+      this.logger.info(`Файл удален из S3: ${key}`);
+    } catch (error) {
+      this.logger.error(`Ошибка при удалении файла из S3 ${key}:`, error);
     }
   }
 
@@ -121,7 +139,7 @@ export class S3Service {
     try {
       const command = new ListObjectsV2Command({
         Bucket: this.bucketName,
-        Prefix: `${userId}/`,
+        Prefix: `spy-bot-media/${userId}/`,
       });
 
       const response = await this.s3.send(command);
@@ -141,8 +159,8 @@ export class S3Service {
 
       return sortedFiles[0].Key || null;
     } catch (error) {
-      console.error(
-        `❌ Ошибка при поиске последнего медиафайла для пользователя ${userId}:`,
+      this.logger.error(
+        `Ошибка при поиске последнего медиафайла для пользователя ${userId}:`,
         error
       );
       return null;

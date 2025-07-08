@@ -9,6 +9,7 @@ import { S3Service } from "./services/s3Service";
 import { BusinessMessage, CachedMessage } from "./types/telegram";
 import { Message } from "telegraf/types";
 import path from "path";
+import { Logger } from "./services/logger";
 
 // Загружаем переменные окружения
 dotenv.config();
@@ -24,6 +25,8 @@ class DialogSpyBot {
   private deleteHandler: MessageDeleteHandler;
   private ownerId: number;
   private s3Service: S3Service | undefined;
+  private scheduledDeletions = new Map<string, NodeJS.Timeout>();
+  private logger = Logger.getInstance();
 
   constructor(cacheService: ICacheService) {
     this.validateEnvironmentVariables();
@@ -36,7 +39,7 @@ class DialogSpyBot {
     try {
       this.s3Service = new S3Service(this.bot);
     } catch (error) {
-      console.warn("⚠️ S3 Service не настроен, выгрузка медиа отключена.");
+      this.logger.warn("S3 Service не настроен, выгрузка медиа отключена.");
       this.s3Service = undefined;
     }
 
@@ -49,8 +52,8 @@ class DialogSpyBot {
       this.s3Service
     );
 
-    console.log("🚀 Dialog Spy Bot инициализирован");
-    console.log(`👤 Владелец: ${this.ownerId}`);
+    this.logger.info("Dialog Spy Bot инициализирован");
+    this.logger.info(`Владелец: ${this.ownerId}`);
   }
 
   /**
@@ -83,7 +86,7 @@ class DialogSpyBot {
   private async handleNewBusinessMessage(ctx: Context): Promise<void> {
     const message = (ctx.update as any).business_message as BusinessMessage;
     if (!message || !message.from) {
-      console.warn("Получено сообщение без автора, пропуск.");
+      this.logger.warn("Получено сообщение без автора, пропуск.");
       return;
     }
 
@@ -93,8 +96,8 @@ class DialogSpyBot {
     // Это медиа-сообщение
     if (this.isMediaMessage(message)) {
       if (!this.s3Service) {
-        console.warn(
-          "⚠️ Получено медиа-сообщение, но S3 не настроен. Сообщение не будет закэшировано."
+        this.logger.warn(
+          "Получено медиа-сообщение, но S3 не настроен. Сообщение не будет закэшировано."
         );
         return; // Не кэшируем, если не можем обработать
       }
@@ -108,8 +111,8 @@ class DialogSpyBot {
 
       if (!s3Key) {
         // Ошибка уже залогирована в s3Service
-        console.warn(
-          "❌ Загрузка медиа в S3 не удалась, сообщение не будет закэшировано."
+        this.logger.warn(
+          "Загрузка медиа в S3 не удалась, сообщение не будет закэшировано."
         );
         return; // Не кэшируем при ошибке загрузки
       }
@@ -123,6 +126,21 @@ class DialogSpyBot {
     // Это что-то другое, что мы не обрабатываем (стикер, локация и т.д.)
     else {
       textForCache = "[Сообщение без текста или неподдерживаемого типа]";
+    }
+
+    if (s3Key) {
+      const keyToDelete = s3Key;
+      const timeoutId = setTimeout(() => {
+        if (this.s3Service) {
+          this.logger.info(
+            `Сработало автоудаление для S3 ключа: ${keyToDelete}`
+          );
+          this.s3Service.deleteFile(keyToDelete);
+          this.scheduledDeletions.delete(keyToDelete);
+        }
+      }, 2 * 60 * 1000); // 2 минуты
+      this.scheduledDeletions.set(s3Key, timeoutId);
+      this.logger.info(`Запланировано удаление для S3 ключа: ${s3Key}`);
     }
 
     const cachedMessage: CachedMessage = {
@@ -185,46 +203,6 @@ class DialogSpyBot {
       await ctx.reply("✅ Кэш сообщений очищен.");
     });
 
-    // Команда для получения медиа из S3
-    this.bot.command("get_media", async (ctx) => {
-      if (ctx.from?.id !== this.ownerId) {
-        await ctx.reply("❌ У вас нет доступа к этой команде.");
-        return;
-      }
-
-      if (!this.s3Service) {
-        await ctx.reply("⚠️ S3 сервис не настроен.");
-        return;
-      }
-
-      const key = ctx.message.text.split(" ")[1];
-      if (!key) {
-        await ctx.reply(
-          "Пожалуйста, укажите ключ файла. Пример: `/get_media <ключ>`"
-        );
-        return;
-      }
-
-      try {
-        const fileData = await this.s3Service.getFile(key);
-
-        if (fileData?.body) {
-          await this.sendMedia(
-            ctx,
-            key,
-            fileData.body as NodeJS.ReadableStream
-          );
-        } else {
-          await ctx.reply(
-            "❌ Не удалось получить файл. Возможно, он не найден."
-          );
-        }
-      } catch (error) {
-        console.error("❌ Ошибка при получении файла из S3:", error);
-        await ctx.reply("❌ Не удалось получить файл. Проверьте логи.");
-      }
-    });
-
     // Команда для получения последнего медиа
     this.bot.command("get_latest_media", async (ctx) => {
       if (ctx.from?.id !== this.ownerId) {
@@ -238,8 +216,33 @@ class DialogSpyBot {
       }
 
       try {
-        const key = await this.s3Service.getLatestMediaKey(ctx.from.id);
+        const pointerCacheKey = `${ctx.from.id}:latest_media_key`;
+        let key: string | null | undefined = await this.cacheService.getValue(
+          pointerCacheKey
+        );
+
         if (key) {
+          this.logger.info(
+            `Получение медиа по ключу из кэша-указателя: ${key}`
+          );
+          // Удаляем ключ, чтобы он не использовался повторно
+          await this.cacheService.deleteValue(pointerCacheKey);
+        } else {
+          this.logger.info(
+            `Ключ в кэше-указателе не найден, ищем последний файл в S3...`
+          );
+          key = await this.s3Service.getLatestMediaKey(ctx.from.id);
+        }
+
+        if (key) {
+          // Отменяем запланированное удаление, так как пользователь запросил файл
+          const timeoutId = this.scheduledDeletions.get(key);
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            this.scheduledDeletions.delete(key);
+            this.logger.info(`Автоудаление отменено для S3 ключа: ${key}`);
+          }
+
           const fileData = await this.s3Service.getFile(key);
           if (fileData?.body) {
             await this.sendMedia(
@@ -247,6 +250,8 @@ class DialogSpyBot {
               key,
               fileData.body as NodeJS.ReadableStream
             );
+            // Удаляем файл сразу после успешной отправки
+            await this.s3Service.deleteFile(key);
           } else {
             await ctx.reply("❌ Не удалось получить файл.");
           }
@@ -254,7 +259,7 @@ class DialogSpyBot {
           await ctx.reply("❌ Последний медиафайл не найден.");
         }
       } catch (error) {
-        console.error("❌ Ошибка при получении последнего медиафайла:", error);
+        this.logger.error("Ошибка при получении последнего медиафайла:", error);
         await ctx.reply("❌ Не удалось получить файл. Проверьте логи.");
       }
     });
@@ -274,26 +279,26 @@ class DialogSpyBot {
 
       // Логирование всех типов событий для отладки
       if (process.env.DEV_MODE === "true") {
-        console.log("🔍 Получено событие:", Object.keys(update).join(", "));
+        this.logger.debug("Получено событие:", Object.keys(update).join(", "));
       }
 
       // Обработка новых бизнес-сообщений (только кэширование)
       if (update.business_message) {
-        console.log("📨 Получено новое бизнес-сообщение");
+        this.logger.info("Получено новое бизнес-сообщение");
         await this.handleNewBusinessMessage(ctx);
         return;
       }
 
       // Обработка отредактированных бизнес-сообщений
       if (update.edited_business_message) {
-        console.log("✏️ Получено отредактированное бизнес-сообщение");
+        this.logger.info("Получено отредактированное бизнес-сообщение");
         await this.editHandler.handleEditedBusinessMessage(ctx);
         return;
       }
 
       // Обработка удаленных бизнес-сообщений
       if (update.deleted_business_messages) {
-        console.log("🗑️ Получено событие удаления бизнес-сообщений");
+        this.logger.info("Получено событие удаления бизнес-сообщений");
         await this.deleteHandler.handleDeletedBusinessMessages(ctx);
         return;
       }
@@ -302,8 +307,8 @@ class DialogSpyBot {
       if (update.business_connection) {
         try {
           const connection = update.business_connection;
-          console.log(
-            `🔗 Business connection ${
+          this.logger.info(
+            `Business connection ${
               connection.is_enabled ? "подключен" : "отключен"
             }: ${connection.id}`
           );
@@ -323,7 +328,7 @@ class DialogSpyBot {
               this.ownerId,
               `✅ *Business подключение активировано\\!*
 
-🔗 ID: \`${connectionId}\`
+�� ID: \`${connectionId}\`
 👤 Пользователь: ${userName}
 📅 Дата: ${dateStr}
 
@@ -346,7 +351,7 @@ class DialogSpyBot {
             );
           }
         } catch (error) {
-          console.error("❌ Ошибка обработки business_connection:", error);
+          this.logger.error("Ошибка обработки business_connection:", error);
         }
         return;
       }
@@ -357,10 +362,10 @@ class DialogSpyBot {
 
     // Обработка ошибок
     this.bot.catch((err, ctx) => {
-      console.error(`❌ Ошибка в боте для пользователя ${ctx.from?.id}:`, err);
+      this.logger.error(`Ошибка в боте для пользователя ${ctx.from?.id}:`, err);
     });
 
-    console.log("✅ Обработчики событий настроены");
+    this.logger.info("Обработчики событий настроены");
   }
 
   /**
@@ -371,11 +376,11 @@ class DialogSpyBot {
       this.setupEventHandlers();
       await this.setupBotCommands();
 
-      console.log("🚀 Запуск бота...");
+      this.logger.info("Запуск бота...");
       await this.bot.launch();
-      console.log("✅ Бот запущен");
+      this.logger.info("Бот запущен");
     } catch (error) {
-      console.error("❌ Не удалось запустить бота:", error);
+      this.logger.error("Не удалось запустить бота:", error);
     }
   }
 
@@ -383,10 +388,23 @@ class DialogSpyBot {
    * Останавливает бота
    */
   public async stop(): Promise<void> {
-    console.log("🔄 Остановка бота...");
+    this.logger.info("Остановка бота...");
     this.bot.stop("SIGINT");
+
+    // Очищаем все запланированные удаления S3 файлов
+    if (this.scheduledDeletions.size > 0) {
+      this.logger.info(
+        `Очистка ${this.scheduledDeletions.size} запланированных удалений...`
+      );
+      for (const timeoutId of this.scheduledDeletions.values()) {
+        clearTimeout(timeoutId);
+      }
+      this.scheduledDeletions.clear();
+      this.logger.info("Все запланированные удаления отменены.");
+    }
+
     await this.cacheService.disconnect();
-    console.log("✅ Бот остановлен");
+    this.logger.info("Бот остановлен");
   }
 
   private async sendHelpMessage(ctx: any): Promise<void> {
@@ -408,7 +426,6 @@ class DialogSpyBot {
 /start \\- запуск и справка
 /stats \\- статистика
 /clear \\- очистить кэш
-/get\\_media <ключ> \\- получить медиафайл
 /get\\_latest\\_media \\- получить последний медиафайл
 /help \\- эта справка
 
@@ -423,7 +440,6 @@ class DialogSpyBot {
       { command: "start", description: "🏁 Запуск и справка" },
       { command: "stats", description: "📊 Статистика работы" },
       { command: "clear", description: "🧹 Очистить кэш" },
-      { command: "get_media", description: "🔗 Получить медиа по ключу" },
       {
         command: "get_latest_media",
         description: "🖼️ Получить последнее медиа",
@@ -431,7 +447,7 @@ class DialogSpyBot {
       { command: "help", description: "📖 Справка" },
     ];
     await this.bot.telegram.setMyCommands(commands);
-    console.log("✅ Команды бота настроены");
+    this.logger.info("Команды бота настроены");
   }
 
   private async sendMedia(
@@ -464,7 +480,7 @@ class DialogSpyBot {
           break;
       }
     } catch (error) {
-      console.error(`❌ Ошибка при отправке медиа файла ${key}:`, error);
+      this.logger.error(`Ошибка при отправке медиа файла ${key}:`, error);
       await ctx.reply("❌ Не удалось отправить медиа файл.");
     }
   }
@@ -474,6 +490,7 @@ class DialogSpyBot {
  * Главная функция для запуска бота
  */
 async function main(): Promise<void> {
+  const logger = Logger.getInstance();
   let botInstance: DialogSpyBot | null = null;
 
   try {
@@ -482,7 +499,7 @@ async function main(): Promise<void> {
     botInstance = new DialogSpyBot(cacheService);
     await botInstance.start();
   } catch (error) {
-    console.error("❌ Критическая ошибка при инициализации бота:", error);
+    logger.error("Критическая ошибка при инициализации бота:", error);
     process.exit(1);
   }
 

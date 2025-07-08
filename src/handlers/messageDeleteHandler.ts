@@ -3,13 +3,14 @@ import type { DeletedBusinessMessages, CachedMessage } from "../types/telegram";
 import type { ICacheService } from "../services/cache/ICacheService";
 import { NotificationService } from "../services/notificationService";
 import type { S3Service } from "../services/s3Service";
-import { Message } from "telegraf/types";
-import { fetch } from "bun";
+import { Logger } from "../services/logger";
 
 /**
  * Обработчик удаления сообщений через Telegram Business API
  */
 export class MessageDeleteHandler {
+  private logger = Logger.getInstance();
+
   constructor(
     private cacheService: ICacheService,
     private ownerId: number,
@@ -30,14 +31,14 @@ export class MessageDeleteHandler {
       const deletedMessages =
         update.deleted_business_messages as DeletedBusinessMessages;
 
-      console.log(
-        `🗑️ Обнаружено удаление ${deletedMessages.message_ids.length} сообщений в чате ID: ${deletedMessages.chat.id}`
+      this.logger.info(
+        `Обнаружено удаление ${deletedMessages.message_ids.length} сообщений в чате ID: ${deletedMessages.chat.id}`
       );
 
       await this.processDeletedMessages(ctx, deletedMessages);
     } catch (error) {
-      console.error(
-        "❌ Ошибка при обработке удаленных бизнес-сообщений:",
+      this.logger.error(
+        "Ошибка при обработке удаленных бизнес-сообщений:",
         error
       );
     }
@@ -101,11 +102,11 @@ export class MessageDeleteHandler {
         );
       }
 
-      console.log(
-        `✅ Обработано удаление ${foundMessages.length} из ${deletedMessages.message_ids.length} сообщений`
+      this.logger.info(
+        `Обработано удаление ${foundMessages.length} из ${deletedMessages.message_ids.length} сообщений`
       );
     } catch (error) {
-      console.error("❌ Ошибка при обработке удаленных сообщений:", error);
+      this.logger.error("Ошибка при обработке удаленных сообщений:", error);
     }
   }
 
@@ -150,6 +151,15 @@ export class MessageDeleteHandler {
           const deletedText = message.text || "[Сообщение без текста]";
           const s3Key = message.s3Key;
 
+          // Сохраняем ключ для команды /get_latest_media
+          if (s3Key) {
+            this.cacheService.setValue(
+              `${this.ownerId}:latest_media_key`,
+              s3Key,
+              120 // TTL 2 минуты
+            );
+          }
+
           const notification = NotificationService.formatDeleteNotification(
             userName,
             userUsername,
@@ -179,7 +189,7 @@ export class MessageDeleteHandler {
         }
       }
     } catch (error) {
-      console.error("❌ Ошибка отправки уведомлений об удалении:", error);
+      this.logger.error("Ошибка отправки уведомлений об удалении:", error);
     }
   }
 
@@ -196,7 +206,7 @@ export class MessageDeleteHandler {
         link_preview_options: { is_disabled: true },
       });
     } catch (error) {
-      console.error("❌ Ошибка отправки уведомления владельцу:", error);
+      this.logger.error("Ошибка отправки уведомления владельцу:", error);
 
       // Пробуем отправить без markdown, если есть проблемы с форматированием
       try {
@@ -205,8 +215,8 @@ export class MessageDeleteHandler {
           notification.replace(/[*_`[\]()~>#+=|{}.!-]/g, "")
         );
       } catch (fallbackError) {
-        console.error(
-          "❌ Критическая ошибка отправки уведомления:",
+        this.logger.error(
+          "Критическая ошибка отправки уведомления:",
           fallbackError
         );
       }
