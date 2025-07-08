@@ -1,17 +1,9 @@
 import type { Context } from "telegraf";
-import type {
-  DeletedBusinessMessages,
-  CachedMessage,
-  PhotoSize,
-  Video,
-  Audio,
-  Document,
-  Voice,
-  VideoNote,
-} from "../types/telegram.js";
-import type { ICacheService } from "../services/cache/ICacheService.js";
-import { NotificationService } from "../services/notificationService.js";
-import type { S3Service } from "../services/s3Service.js";
+import type { DeletedBusinessMessages, CachedMessage } from "../types/telegram";
+import type { ICacheService } from "../services/cache/ICacheService";
+import { NotificationService } from "../services/notificationService";
+import type { S3Service } from "../services/s3Service";
+import { Message } from "telegraf/types";
 import { fetch } from "bun";
 
 /**
@@ -155,10 +147,8 @@ export class MessageDeleteHandler {
           const message = userMessages[0];
           if (!message) continue;
 
-          const s3Key = await this.handleMediaUpload(ctx, message);
-
-          const deletedText =
-            message.text || (s3Key ? "[Медиафайл]" : "[Сообщение без текста]");
+          const deletedText = message.text || "[Сообщение без текста]";
+          const s3Key = message.s3Key;
 
           const notification = NotificationService.formatDeleteNotification(
             userName,
@@ -170,15 +160,12 @@ export class MessageDeleteHandler {
           await this.sendNotificationToOwner(ctx, notification);
         } else {
           // Множественные сообщения
-          const deletedTexts: string[] = [];
+          const deletedItems: { text: string; s3Key?: string | null }[] = [];
           for (const msg of userMessages) {
-            const s3Key = await this.handleMediaUpload(ctx, msg);
-            deletedTexts.push(
-              msg.text ||
-                (s3Key
-                  ? `[Медиафайл, ключ: ${s3Key}]`
-                  : "[Сообщение без текста]")
-            );
+            deletedItems.push({
+              text: msg.text || "[Сообщение без текста]",
+              s3Key: msg.s3Key ?? null,
+            });
           }
 
           const notification =
@@ -186,7 +173,7 @@ export class MessageDeleteHandler {
               userName,
               userUsername,
               chatName,
-              deletedTexts
+              deletedItems
             );
           await this.sendNotificationToOwner(ctx, notification);
         }
@@ -224,104 +211,6 @@ export class MessageDeleteHandler {
         );
       }
     }
-  }
-
-  private async handleMediaUpload(
-    ctx: Context,
-    message: CachedMessage
-  ): Promise<string | null> {
-    if (!this.s3Service) {
-      return null;
-    }
-
-    const media =
-      message.photo?.[message.photo.length - 1] || // Берем наибольшее разрешение
-      message.video ||
-      message.audio ||
-      message.document ||
-      message.voice ||
-      message.video_note;
-
-    if (!media) {
-      return null;
-    }
-
-    try {
-      const fileId = media.file_id;
-      const fileLink = await ctx.telegram.getFileLink(fileId);
-      const response = await fetch(fileLink.href);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch file: ${response.statusText}`);
-      }
-
-      const buffer = Buffer.from(await response.arrayBuffer());
-
-      const fileExtension = this.getFileExtension(media);
-      const key = `${message.business_connection_id}/${message.chat.id}/${message.message_id}_${media.file_unique_id}.${fileExtension}`;
-
-      await this.s3Service.uploadFile(key, buffer);
-      return key;
-    } catch (error) {
-      console.error("❌ Ошибка при загрузке медиа в S3:", error);
-      return null;
-    }
-  }
-
-  private getFileExtension(
-    media: PhotoSize | Video | Audio | Document | Voice | VideoNote
-  ): string {
-    // 1. Из имени файла, если оно есть
-    if ("file_name" in media && media.file_name) {
-      const parts = media.file_name.split(".");
-      if (parts.length > 1) {
-        const ext = parts.pop()?.toLowerCase();
-        if (ext) return ext;
-      }
-    }
-
-    // 2. Из MIME-типа
-    if ("mime_type" in media && media.mime_type) {
-      const mimeType = media.mime_type;
-      // video/mp4 -> mp4
-      // audio/ogg -> ogg
-      const parts = mimeType.split("/");
-      if (parts.length === 2 && parts[1]) {
-        // Стандартные сопоставления
-        switch (parts[1]) {
-          case "jpeg":
-            return "jpg";
-          case "mp4":
-            return "mp4";
-          case "ogg":
-            return "ogg";
-          case "mpeg":
-            return "mp3";
-          case "webm":
-            return "webm";
-          case "png":
-            return "png";
-          case "gif":
-            return "gif";
-          default:
-            return parts[1];
-        }
-      }
-    }
-
-    // 3. По типу объекта (наименее точный метод)
-    if ("width" in media && "height" in media && !("duration" in media))
-      return "jpg"; // PhotoSize
-    if ("duration" in media && "length" in media) return "mp4"; // VideoNote
-    if ("duration" in media && !("length" in media)) return "mp4"; // Video
-    if (
-      "duration" in media &&
-      "mime_type" in media &&
-      media.mime_type?.startsWith("audio/")
-    )
-      return "ogg"; // Voice
-
-    return "bin"; // Не удалось определить
   }
 
   /**

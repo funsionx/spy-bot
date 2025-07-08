@@ -10,26 +10,6 @@ export class MessageEditHandler {
   constructor(private cacheService: ICacheService, private ownerId: number) {}
 
   /**
-   * Обрабатывает входящее новое бизнес-сообщение (только кэширование)
-   */
-  async handleBusinessMessage(ctx: Context): Promise<void> {
-    try {
-      const update = ctx.update;
-
-      if (!("business_message" in update)) {
-        return;
-      }
-
-      const message = update.business_message as BusinessMessage;
-
-      // Кэшируем новое сообщение для будущего отслеживания изменений
-      await this.cacheService.cacheMessage(message);
-    } catch (error) {
-      console.error("❌ Ошибка при обработке бизнес-сообщения:", error);
-    }
-  }
-
-  /**
    * Обрабатывает отредактированное бизнес-сообщение
    */
   async handleEditedBusinessMessage(ctx: Context): Promise<void> {
@@ -87,9 +67,12 @@ export class MessageEditHandler {
         return;
       }
 
-      // Проверяем, что текст действительно изменился
       const oldText = originalMessage.text || "";
-      const newText = editedMessage.text || "";
+      const newText =
+        editedMessage.text ||
+        (originalMessage.s3Key
+          ? "(подпись к медиа была изменена/удалена)"
+          : "");
 
       if (oldText === newText) {
         console.log(
@@ -114,13 +97,19 @@ export class MessageEditHandler {
         userUsername,
         chatName,
         oldText,
-        newText
+        newText,
+        originalMessage.s3Key
       );
 
       await this.sendNotificationToOwner(ctx, notification);
 
       // Обновляем кэш новым содержимым
-      await this.cacheService.cacheMessage(editedMessage);
+      const newCachedMessage: import("../types/telegram").CachedMessage = {
+        ...originalMessage, // Берем за основу старое кэшированное сообщение
+        ...editedMessage, // Перезаписываем измененными полями
+        s3Key: originalMessage.s3Key ?? null, // Убеждаемся, что s3Key сохранен как null, если undefined
+      };
+      await this.cacheService.cacheMessage(newCachedMessage);
 
       console.log(
         `✅ Уведомление об изменении отправлено для сообщения ID: ${editedMessage.message_id}`

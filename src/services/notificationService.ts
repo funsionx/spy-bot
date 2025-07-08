@@ -10,7 +10,8 @@ export class NotificationService {
     userUsername: string | undefined,
     chatName: string,
     oldText: string,
-    newText: string
+    newText: string,
+    s3Key?: string | null
   ): string {
     const escapedUserName = this.escapeMarkdown(userName);
     const escapedChatName = this.escapeMarkdown(chatName);
@@ -18,13 +19,19 @@ export class NotificationService {
       ? `\n👤 \`${this.escapeForCode(userUsername)}\``
       : "";
 
-    return `🔄 *${escapedUserName}* изменил\\(а\\) сообщение в чате с "${escapedChatName}":${usernameLine}
+    let notification = `🔄 *${escapedUserName}* изменил\\(а\\) сообщение в чате с "${escapedChatName}":${usernameLine}
 
 *До:*
 > ${this.escapeMarkdown(oldText)}
 
 *После:*
 > ${this.escapeMarkdown(newText)}`;
+
+    if (s3Key) {
+      notification += `\n\n🖼️ Чтобы получить медиафайл, используйте команду: \`/get_latest_media\``;
+    }
+
+    return notification;
   }
 
   /**
@@ -46,13 +53,12 @@ export class NotificationService {
 
     let notification = `🗑️ *${escapedUserName}* удалил\\(а\\) сообщение в чате с "${escapedChatName}":${usernameLine}
 
-*Deleted:*
+*Удалено:*
 > ${escapedText}`;
 
     if (s3Key) {
-      const escapedS3Key = this.escapeMarkdown(s3Key);
-      const command = `/get_media ${escapedS3Key}`;
-      notification += `\n\n🖼️ Медиафайл сохранен\\. \nЧтобы получить его, используйте команду: \`${command}\``;
+      const command = `/get_latest_media`;
+      notification += `\n\n🖼️ Медиафайл сохранен\\. Чтобы получить его, используйте команду: ${command}`;
     }
 
     return notification;
@@ -65,7 +71,7 @@ export class NotificationService {
     userName: string,
     userUsername: string | undefined,
     chatName: string,
-    deletedMessages: string[]
+    deletedMessages: { text: string; s3Key?: string | null }[]
   ): string {
     const escapedUserName = this.escapeMarkdown(userName);
     const escapedChatName = this.escapeMarkdown(chatName);
@@ -74,15 +80,16 @@ export class NotificationService {
       ? `\n👤 \`${this.escapeForCode(userUsername)}\``
       : "";
 
-    let notification = `🗑️ *${escapedUserName}* удалил\\(а\\) ${messageCount} сообщений в чате "${escapedChatName}":${usernameLine}
+    let notification = `🗑️ *${escapedUserName}* удалил\\(а\\) ${messageCount} сообщений в чате "${escapedChatName}":${usernameLine}\n\n`;
 
-`;
-
-    deletedMessages.forEach((text, index) => {
-      notification += `*Deleted ${index + 1}:*
-> ${this.escapeMarkdown(text)}
-
-`;
+    deletedMessages.forEach((msg, index) => {
+      notification += `*Удалено ${index + 1}:*\n> ${this.escapeMarkdown(
+        msg.text
+      )}\n`;
+      if (msg.s3Key) {
+        const command = `/get_media ${msg.s3Key}`;
+        notification += `🖼️ Получить: \`${this.escapeForCode(command)}\`\n\n`;
+      }
     });
 
     return notification.trim();

@@ -45,7 +45,7 @@ export class RedisCacheService implements ICacheService {
     }
   }
 
-  async cacheMessage(message: BusinessMessage): Promise<void> {
+  async cacheMessage(message: CachedMessage): Promise<void> {
     if (!this.connected) {
       await this.connect();
     }
@@ -56,40 +56,13 @@ export class RedisCacheService implements ICacheService {
       message.message_id
     );
 
-    if (!message.from) {
-      console.warn(
-        `Сообщение ${message.message_id} не имеет автора, пропуск кэширования.`
-      );
-      return;
-    }
+    await this.client.setEx(key, this.ttlSeconds, JSON.stringify(message));
 
-    const cachedMessage: CachedMessage = {
-      message_id: message.message_id,
-      from: message.from,
-      chat: message.chat,
-      date: message.date,
-      business_connection_id: message.business_connection_id,
-      ...(message.text && { text: message.text }),
-      ...(message.photo && { photo: message.photo }),
-      ...(message.video && { video: message.video }),
-      ...(message.audio && { audio: message.audio }),
-      ...(message.document && { document: message.document }),
-      ...(message.voice && { voice: message.voice }),
-      ...(message.video_note && { video_note: message.video_note }),
-    };
+    const logText = message.s3Key
+      ? `Медиафайл (S3: ${message.s3Key})`
+      : `Текст: "${message.text?.slice(0, 50)}..."`;
 
-    await this.client.setEx(
-      key,
-      this.ttlSeconds,
-      JSON.stringify(cachedMessage)
-    );
-
-    console.log(
-      `📝 Сообщение закэшировано (Redis): ${key} | Текст: "${message.text?.slice(
-        0,
-        50
-      )}..."`
-    );
+    console.log(`📝 Сообщение закэшировано (Redis): ${key} | ${logText}`);
   }
 
   async getCachedMessage(

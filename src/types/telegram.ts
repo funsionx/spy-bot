@@ -128,6 +128,7 @@ export interface CachedMessage {
   document?: Document;
   voice?: Voice;
   video_note?: VideoNote;
+  s3Key?: string | null;
 }
 
 export interface NotificationData {

@@ -1,4 +1,4 @@
-import type { CachedMessage, BusinessMessage } from "../../types/telegram.js";
+import type { CachedMessage, BusinessMessage } from "../../types/telegram";
 
 /**
  * Интерфейс для сервиса кэширования сообщений
@@ -7,7 +7,7 @@ export interface ICacheService {
   /**
    * Кэширует входящее бизнес-сообщение
    */
-  cacheMessage(message: BusinessMessage): Promise<void>;
+  cacheMessage(message: CachedMessage): Promise<void>;
 
   /**
    * Получает сообщение из кэша по ID
