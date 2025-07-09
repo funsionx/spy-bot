@@ -188,7 +188,12 @@ export class RedisCacheService implements ICacheService {
     ttlSeconds: number
   ): Promise<void> {
     if (!this.connected) await this.connect();
-    await this.client.setEx(key, ttlSeconds, value);
+
+    if (ttlSeconds === -1) {
+      await this.client.set(key, value);
+    } else {
+      await this.client.setEx(key, ttlSeconds, value);
+    }
   }
 
   async getValue(key: string): Promise<string | null> {

@@ -1,108 +1,9 @@
+import i18next from "../i18n";
+
 /**
  * Сервис для форматирования уведомлений о изменениях и удалениях сообщений
  */
 export class NotificationService {
-  /**
-   * Форматирует уведомление об изменении сообщения
-   */
-  static formatEditNotification(
-    userName: string,
-    userUsername: string | undefined,
-    chatName: string,
-    oldText: string,
-    newText: string,
-    s3Key?: string | null
-  ): string {
-    const escapedUserName = this.escapeMarkdown(userName);
-    const escapedChatName = this.escapeMarkdown(chatName);
-    const usernameLine = userUsername
-      ? `\n👤 \`${this.escapeForCode(userUsername)}\``
-      : "";
-
-    let notification = `🔄 *${escapedUserName}* изменил\\(а\\) сообщение в чате с "${escapedChatName}":${usernameLine}
-
-*До:*
-> ${this.escapeMarkdown(oldText)}
-
-*После:*
-> ${this.escapeMarkdown(newText)}`;
-
-    if (s3Key) {
-      const command = "/get_latest_media";
-      notification += `\n\n🖼️ Чтобы получить медиафайл, используйте команду: \`${this.escapeForCode(
-        command
-      )}\``;
-    }
-
-    return notification;
-  }
-
-  /**
-   * Форматирует уведомление об удалении сообщения
-   */
-  static formatDeleteNotification(
-    userName: string,
-    userUsername: string | undefined,
-    chatName: string,
-    deletedText: string,
-    s3Key?: string | null
-  ): string {
-    const escapedUserName = this.escapeMarkdown(userName);
-    const escapedChatName = this.escapeMarkdown(chatName);
-    const escapedText = this.escapeMarkdown(deletedText);
-    const usernameLine = userUsername
-      ? `\n👤 \`${this.escapeForCode(userUsername)}\``
-      : "";
-
-    let notification = `🗑️ *${escapedUserName}* удалил\\(а\\) сообщение в чате с "${escapedChatName}":${usernameLine}
-
-*Удалено:*
-> ${escapedText}`;
-
-    if (s3Key) {
-      const command = `/get_latest_media`;
-      notification += `\n\n🖼️ Медиафайл сохранен\\. Чтобы получить его, используйте команду: \`${this.escapeForCode(
-        command
-      )}\``;
-    }
-
-    return notification;
-  }
-
-  /**
-   * Форматирует множественное уведомление об удалении сообщений
-   */
-  static formatMultipleDeleteNotification(
-    userName: string,
-    userUsername: string | undefined,
-    chatName: string,
-    deletedMessages: { text: string; s3Key?: string | null }[]
-  ): string {
-    const escapedUserName = this.escapeMarkdown(userName);
-    const escapedChatName = this.escapeMarkdown(chatName);
-    const messageCount = deletedMessages.length;
-    const usernameLine = userUsername
-      ? `\n👤 \`${this.escapeForCode(userUsername)}\``
-      : "";
-
-    let notification = `🗑️ *${escapedUserName}* удалил\\(а\\) ${messageCount} сообщений в чате "${escapedChatName}":${usernameLine}\n\n`;
-
-    deletedMessages.forEach((msg, index) => {
-      notification += `*Удалено ${index + 1}:*\n> ${this.escapeMarkdown(
-        msg.text
-      )}\n`;
-    });
-
-    if (deletedMessages.some((msg) => msg.s3Key)) {
-      const command = "/get_latest_media";
-      notification += `\n🖼️ Некоторые сообщения содержали медиа\\. Чтобы получить последний файл, введите: \`${this.escapeForCode(
-        command
-      )}\``;
-    }
-
-    return notification.trim();
-  }
-
   /**
    * Получает название чата для отображения
    */
@@ -120,10 +21,14 @@ export class NotificationService {
     if (chat.type === "private") {
       const firstName = chat.first_name || "";
       const lastName = chat.last_name || "";
-      return `${firstName} ${lastName}`.trim() || chat.username || "Личный чат";
+      return (
+        `${firstName} ${lastName}`.trim() ||
+        chat.username ||
+        i18next.t("common.private_chat")
+      );
     }
 
-    return chat.username || "Неизвестный чат";
+    return chat.username || i18next.t("common.unknown_chat");
   }
 
   /**
@@ -139,7 +44,7 @@ export class NotificationService {
     return (
       `${firstName} ${lastName}`.trim() ||
       user.username ||
-      "Неизвестный пользователь"
+      i18next.t("common.unknown_user")
     );
   }
 
@@ -170,15 +75,13 @@ export class NotificationService {
   ): string {
     const idsText =
       messageIds.length === 1
-        ? `сообщение с ID ${messageIds[0]}`
-        : `сообщения с ID: ${messageIds.join(", ")}`;
+        ? `ID ${messageIds[0]}`
+        : `IDs: ${messageIds.join(", ")}`;
 
-    return `⚠️ В чате "${chatName}" было удалено/изменено ${idsText}, но оригинальный текст не найден в кэше.
-
-Это может произойти, если:
-• Сообщение было отправлено до запуска бота
-• Кэш был очищен
-• Сообщение старше 2 минут`;
+    return i18next.t("notifications.original_not_found", {
+      chatName: this.escapeMarkdown(chatName),
+      messageId: idsText,
+    });
   }
 
   /**
@@ -189,16 +92,17 @@ export class NotificationService {
     hits: number;
     misses: number;
   }): string {
-    return `📊 *Статистика бота:*
+    return `${i18next.t("notifications.stats_title")}
 
-🔑 Сообщений в кэше: ${stats.keys}
-✅ Попадания в кэш: ${stats.hits}
-❌ Промахи кэша: ${stats.misses}
-📈 Процент попаданий: ${
-      stats.hits + stats.misses > 0
-        ? Math.round((stats.hits / (stats.hits + stats.misses)) * 100)
-        : 0
-    }%`;
+${i18next.t("notifications.stats_keys", { count: stats.keys })}
+${i18next.t("notifications.stats_hits", { count: stats.hits })}
+${i18next.t("notifications.stats_misses", { count: stats.misses })}
+${i18next.t("notifications.stats_hit_rate", {
+  rate:
+    stats.hits + stats.misses > 0
+      ? Math.round((stats.hits / (stats.hits + stats.misses)) * 100)
+      : 0,
+})}`;
   }
 
   /**

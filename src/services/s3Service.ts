@@ -51,6 +51,7 @@ export class S3Service {
       | Message.PhotoMessage
       | Message.VoiceMessage
       | Message.VideoNoteMessage
+      | Message.DocumentMessage
   ): Promise<string | null> {
     const fileId = this.getFileId(message);
     if (!fileId || !message.from) {
@@ -176,6 +177,7 @@ export class S3Service {
       | Message.PhotoMessage
       | Message.VoiceMessage
       | Message.VideoNoteMessage
+      | Message.DocumentMessage
   ): string | undefined {
     if ("video" in message) {
       return message.video.file_id;
@@ -185,6 +187,9 @@ export class S3Service {
     }
     if ("video_note" in message) {
       return message.video_note.file_id;
+    }
+    if ("document" in message) {
+      return message.document.file_id;
     }
     if ("photo" in message && message.photo.length > 0) {
       const photo = message.photo.sort(
@@ -201,6 +206,7 @@ export class S3Service {
       | Message.PhotoMessage
       | Message.VoiceMessage
       | Message.VideoNoteMessage
+      | Message.DocumentMessage
   ): string {
     if ("video_note" in message) return "videonote";
     if ("voice" in message) return "voice";

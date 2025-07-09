@@ -9,6 +9,7 @@ import { S3Service } from "./services/s3Service";
 import { BusinessMessage, CachedMessage } from "./types/telegram";
 import { Message } from "telegraf/types";
 import path from "path";
+import i18next, { initializeI18n } from "./i18n";
 import { Logger } from "./services/logger";
 
 // Загружаем переменные окружения
@@ -45,10 +46,17 @@ class DialogSpyBot {
 
     // Инициализируем сервисы
     this.cacheService = cacheService;
-    this.editHandler = new MessageEditHandler(this.cacheService, this.ownerId);
+
+    const sendContent = this.sendContentMessage.bind(this);
+    this.editHandler = new MessageEditHandler(
+      this.cacheService,
+      this.ownerId,
+      sendContent
+    );
     this.deleteHandler = new MessageDeleteHandler(
       this.cacheService,
       this.ownerId,
+      sendContent,
       this.s3Service
     );
 
@@ -79,7 +87,8 @@ class DialogSpyBot {
       "photo" in message ||
       "video" in message ||
       "voice" in message ||
-      "video_note" in message
+      "video_note" in message ||
+      "document" in message
     );
   }
 
@@ -106,7 +115,8 @@ class DialogSpyBot {
         | Message.PhotoMessage
         | Message.VideoMessage
         | Message.VoiceMessage
-        | Message.VideoNoteMessage;
+        | Message.VideoNoteMessage
+        | Message.DocumentMessage;
       s3Key = await this.s3Service.uploadMedia(mediaMessage);
 
       if (!s3Key) {
@@ -153,6 +163,40 @@ class DialogSpyBot {
   }
 
   /**
+   * Отправляет контент сообщения (текст и/или медиа)
+   */
+  public async sendContentMessage(
+    chatId: number,
+    text: string,
+    s3Key?: string | null
+  ): Promise<void> {
+    // Если есть медиа, пробуем его отправить
+    if (s3Key && this.s3Service) {
+      const fileData = await this.s3Service.getFile(s3Key);
+      if (fileData?.body) {
+        await this.sendMedia(
+          chatId,
+          s3Key,
+          fileData.body as NodeJS.ReadableStream,
+          text
+        );
+        // Если медиа отправлено успешно, выходим
+        return;
+      }
+      this.logger.warn(
+        `Не удалось получить медиа из S3 по ключу: ${s3Key}. Отправляем только текст.`
+      );
+    }
+
+    // Если медиа нет, или не удалось его получить, или текста вообще нет
+    if (text) {
+      await this.bot.telegram.sendMessage(chatId, text, {
+        parse_mode: "MarkdownV2",
+      });
+    }
+  }
+
+  /**
    * Настраивает обработчики событий бота
    */
   private setupEventHandlers(): void {
@@ -161,28 +205,26 @@ class DialogSpyBot {
       const userId = ctx.from?.id;
 
       if (userId === this.ownerId) {
-        await ctx.reply(
-          `🎯 *Добро пожаловать в Dialog Spy Bot\\!*
-
-Этот бот поможет вам отслеживать изменения и удаления в ваших бизнес-чатах\\.`,
-          {
-            parse_mode: "MarkdownV2",
-            ...Markup.inlineKeyboard([
-              Markup.button.url("Перейти к обучению", "https://google.com"),
-            ]),
-          }
-        );
+        await ctx.reply(i18next.t("notifications.welcome"), {
+          parse_mode: "MarkdownV2",
+          ...Markup.inlineKeyboard([
+            Markup.button.url(
+              i18next.t("common.tutorial_button"),
+              "https://google.com"
+            ),
+          ]),
+        });
         // Отправляем справку следом
         await this.sendHelpMessage(ctx);
       } else {
-        await ctx.reply("❌ У вас нет доступа к этому боту.");
+        await ctx.reply(i18next.t("notifications.access_denied"));
       }
     });
 
     // Команда для просмотра статистики
     this.bot.command("stats", async (ctx) => {
       if (ctx.from?.id !== this.ownerId) {
-        await ctx.reply("❌ У вас нет доступа к этой команде.");
+        await ctx.reply(i18next.t("notifications.access_denied_command"));
         return;
       }
 
@@ -195,23 +237,23 @@ class DialogSpyBot {
     // Команда для очистки кэша
     this.bot.command("clear", async (ctx) => {
       if (ctx.from?.id !== this.ownerId) {
-        await ctx.reply("❌ У вас нет доступа к этой команде.");
+        await ctx.reply(i18next.t("notifications.access_denied_command"));
         return;
       }
 
       await this.cacheService.clearCache();
-      await ctx.reply("✅ Кэш сообщений очищен.");
+      await ctx.reply(i18next.t("notifications.cache_cleared"));
     });
 
     // Команда для получения последнего медиа
     this.bot.command("get_latest_media", async (ctx) => {
       if (ctx.from?.id !== this.ownerId) {
-        await ctx.reply("❌ У вас нет доступа к этой команде.");
+        await ctx.reply(i18next.t("notifications.access_denied_command"));
         return;
       }
 
       if (!this.s3Service) {
-        await ctx.reply("⚠️ S3 сервис не настроен.");
+        await ctx.reply(i18next.t("notifications.s3_not_configured"));
         return;
       }
 
@@ -246,31 +288,68 @@ class DialogSpyBot {
           const fileData = await this.s3Service.getFile(key);
           if (fileData?.body) {
             await this.sendMedia(
-              ctx,
+              ctx.from.id,
               key,
               fileData.body as NodeJS.ReadableStream
             );
             // Удаляем файл сразу после успешной отправки
             await this.s3Service.deleteFile(key);
           } else {
-            await ctx.reply("❌ Не удалось получить файл.");
+            await ctx.reply(i18next.t("notifications.file_not_found"));
           }
         } else {
-          await ctx.reply("❌ Последний медиафайл не найден.");
+          await ctx.reply(i18next.t("notifications.latest_media_not_found"));
         }
       } catch (error) {
         this.logger.error("Ошибка при получении последнего медиафайла:", error);
-        await ctx.reply("❌ Не удалось получить файл. Проверьте логи.");
+        await ctx.reply(i18next.t("notifications.get_media_error"));
       }
     });
 
     // Команда справки
     this.bot.command("help", async (ctx) => {
       if (ctx.from?.id !== this.ownerId) {
-        await ctx.reply("❌ У вас нет доступа к этому боту.");
+        await ctx.reply(i18next.t("notifications.access_denied"));
         return;
       }
       await this.sendHelpMessage(ctx);
+    });
+
+    // Команда для смены языка
+    this.bot.command("set_language", async (ctx) => {
+      if (ctx.from?.id !== this.ownerId) {
+        await ctx.reply(i18next.t("notifications.access_denied_command"));
+        return;
+      }
+
+      await ctx.reply(i18next.t("language.select"), {
+        ...Markup.inlineKeyboard([
+          Markup.button.callback("Русский 🇷🇺", "set_lang_ru"),
+          Markup.button.callback("English 🇬🇧", "set_lang_en"),
+        ]),
+      });
+    });
+
+    // Обработчик смены языка
+    this.bot.action(/set_lang_(ru|en)/, async (ctx) => {
+      const lang = ctx.match[1];
+      if (!lang) return;
+
+      const userId = ctx.from?.id;
+      if (userId !== this.ownerId) {
+        await ctx.answerCbQuery(i18next.t("notifications.access_denied"));
+        return;
+      }
+
+      // Сохраняем выбор пользователя в Redis
+      await this.cacheService.setValue(`user:${userId}:lang`, lang, -1); // -1 TTL для бессрочного хранения
+      await i18next.changeLanguage(lang);
+
+      // Обновляем команды на новом языке
+      await this.setupBotCommands();
+
+      await ctx.editMessageText(i18next.t("language.changed", { lang }));
+      await ctx.answerCbQuery();
     });
 
     // Универсальный обработчик для Business API
@@ -280,6 +359,16 @@ class DialogSpyBot {
       // Логирование всех типов событий для отладки
       if (process.env.DEV_MODE === "true") {
         this.logger.debug("Получено событие:", Object.keys(update).join(", "));
+      }
+
+      // Устанавливаем язык для каждого запроса от владельца
+      if (ctx.from?.id === this.ownerId) {
+        const userLang = await this.cacheService.getValue(
+          `user:${ctx.from.id}:lang`
+        );
+        if (userLang && userLang !== i18next.language) {
+          await i18next.changeLanguage(userLang);
+        }
       }
 
       // Обработка новых бизнес-сообщений (только кэширование)
@@ -326,13 +415,15 @@ class DialogSpyBot {
 
             await ctx.telegram.sendMessage(
               this.ownerId,
-              `✅ *Business подключение активировано\\!*
-
-�� ID: \`${connectionId}\`
-👤 Пользователь: ${userName}
-📅 Дата: ${dateStr}
-
-Теперь бот будет отслеживать изменения в ваших чатах\\.`,
+              `${i18next.t(
+                "notifications.business_connection_enabled"
+              )}\n\n${i18next.t("notifications.connection_id", {
+                id: connectionId,
+              })}\n${i18next.t("notifications.connection_user", {
+                userName,
+              })}\n${i18next.t("notifications.connection_date", {
+                date: dateStr,
+              })}\n\n${i18next.t("notifications.connection_enabled_message")}`,
               { parse_mode: "MarkdownV2" }
             );
           } else {
@@ -342,11 +433,11 @@ class DialogSpyBot {
 
             await ctx.telegram.sendMessage(
               this.ownerId,
-              `❌ *Business подключение отключено*
-
-🔗 ID: \`${connectionId}\`
-
-Бот больше не будет отслеживать изменения в чатах\\.`,
+              `${i18next.t(
+                "notifications.business_connection_disabled"
+              )}\n\n${i18next.t("notifications.connection_id", {
+                id: connectionId,
+              })}\n\n${i18next.t("notifications.connection_disabled_message")}`,
               { parse_mode: "MarkdownV2" }
             );
           }
@@ -362,7 +453,10 @@ class DialogSpyBot {
 
     // Обработка ошибок
     this.bot.catch((err, ctx) => {
-      this.logger.error(`Ошибка в боте для пользователя ${ctx.from?.id}:`, err);
+      this.logger.error(
+        `Глобальная ошибка в боте (updateType: ${ctx.updateType}):`,
+        err
+      );
     });
 
     this.logger.info("Обработчики событий настроены");
@@ -408,80 +502,74 @@ class DialogSpyBot {
   }
 
   private async sendHelpMessage(ctx: any): Promise<void> {
-    await ctx.reply(
-      `📖 *Справка Dialog Spy Bot*
-
-🔍 *Функции:*
-• Отслеживание изменений сообщений
-• Отслеживание удаленных сообщений
-• Сохранение удаленных медиафайлов
-• Уведомления в реальном времени
-
-⚙️ *Настройка:*
-1\\. Telegram \\> Настройки \\> Business
-2\\. Боты для чатов \\> Добавить бота
-3\\. Выберите этого бота
-
-🎯 *Команды:*
-/start \\- запуск и справка
-/stats \\- статистика
-/clear \\- очистить кэш
-/get\\_latest\\_media \\- получить последний медиафайл
-/help \\- эта справка
-
-⚠️ *Важно:* 
-Бот не сохраняет сообщения\\. Все уведомления приходят только в этот чат\\.`,
-      { parse_mode: "MarkdownV2" }
-    );
+    await ctx.reply(i18next.t("help_text"), { parse_mode: "MarkdownV2" });
   }
 
   private async setupBotCommands(): Promise<void> {
     const commands = [
-      { command: "start", description: "🏁 Запуск и справка" },
-      { command: "stats", description: "📊 Статистика работы" },
-      { command: "clear", description: "🧹 Очистить кэш" },
+      {
+        command: "start",
+        description: i18next.t("commands.start"),
+      },
+      { command: "stats", description: i18next.t("commands.stats") },
+      { command: "clear", description: i18next.t("commands.clear") },
       {
         command: "get_latest_media",
-        description: "🖼️ Получить последнее медиа",
+        description: i18next.t("commands.get_latest_media"),
       },
-      { command: "help", description: "📖 Справка" },
+      { command: "help", description: i18next.t("commands.help") },
+      {
+        command: "set_language",
+        description: i18next.t("commands.set_language"),
+      },
     ];
     await this.bot.telegram.setMyCommands(commands);
     this.logger.info("Команды бота настроены");
   }
 
   private async sendMedia(
-    ctx: Context,
+    chatId: number,
     key: string,
-    fileStream: NodeJS.ReadableStream
+    fileStream: NodeJS.ReadableStream,
+    caption?: string
   ) {
     const keyParts = path.basename(key, path.extname(key)).split("_");
     const mediaType = keyParts[keyParts.length - 1];
     const source = { source: fileStream };
 
+    const captionOptions = caption
+      ? { caption, parse_mode: "MarkdownV2" as const }
+      : undefined;
+    const voiceCaptionOptions = caption ? { caption } : undefined;
+
     try {
       switch (mediaType) {
         case "video":
-          await ctx.replyWithVideo(source);
+          await this.bot.telegram.sendVideo(chatId, source, captionOptions);
           break;
         case "photo":
-          await ctx.replyWithPhoto(source);
+          await this.bot.telegram.sendPhoto(chatId, source, captionOptions);
           break;
         case "voice":
-          await ctx.replyWithVoice(source);
+          await this.bot.telegram.sendVoice(
+            chatId,
+            source,
+            voiceCaptionOptions
+          );
           break;
         case "videonote":
-          await ctx.replyWithVideoNote(source);
+          await this.bot.telegram.sendVideoNote(chatId, source);
           break;
         default:
-          await ctx.replyWithDocument(source, {
-            caption: path.basename(key),
-          });
+          await this.bot.telegram.sendDocument(chatId, source, captionOptions);
           break;
       }
     } catch (error) {
       this.logger.error(`Ошибка при отправке медиа файла ${key}:`, error);
-      await ctx.reply("❌ Не удалось отправить медиа файл.");
+      await this.bot.telegram.sendMessage(
+        chatId,
+        i18next.t("notifications.file_not_found")
+      );
     }
   }
 }
@@ -494,6 +582,7 @@ async function main(): Promise<void> {
   let botInstance: DialogSpyBot | null = null;
 
   try {
+    await initializeI18n();
     const cacheService = await CacheFactory.createFromEnv();
 
     botInstance = new DialogSpyBot(cacheService);

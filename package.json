@@ -24,6 +24,7 @@
     "@aws-sdk/s3-request-presigner": "^3.842.0",
     "@types/node-cache": "^4.2.5",
     "dotenv": "^16.3.1",
+    "i18next": "^25.3.2",
     "moment": "^2.30.1",
     "node-cache": "^5.1.2",
     "redis": "^5.5.6",

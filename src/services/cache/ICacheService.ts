@@ -53,6 +53,9 @@ export interface ICacheService {
 
   /**
    * Устанавливает простое значение ключ-значение с TTL
+   * @param key Ключ
+   * @param value Значение
+   * @param ttlSeconds Время жизни в секундах. -1 для бессрочного хранения.
    */
   setValue(key: string, value: string, ttlSeconds: number): Promise<void>;
 
