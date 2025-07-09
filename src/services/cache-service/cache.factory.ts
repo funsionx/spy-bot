@@ -1,6 +1,6 @@
-import type { ICacheService } from "./ICacheService.js";
-import { RedisCacheService } from "./RedisCacheService.js";
-import { Logger } from "../logger.js";
+import type { ICacheService } from "./cache.service.interface.js";
+import { RedisCacheService } from "./redis-cache.service.js";
+import { Logger } from "../logger-service/logger.service.js";
 
 /**
  * Фабрика для создания сервиса кэширования

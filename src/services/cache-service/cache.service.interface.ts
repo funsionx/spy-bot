@@ -37,16 +37,6 @@ export interface ICacheService {
   ): Promise<void>;
 
   /**
-   * Получает статистику кэша
-   */
-  getStats(): Promise<{ keys: number; hits: number; misses: number }>;
-
-  /**
-   * Очищает весь кэш
-   */
-  clearCache(): Promise<void>;
-
-  /**
    * Закрывает соединение с кэшем (для Redis)
    */
   disconnect(): Promise<void>;

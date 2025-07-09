@@ -1,4 +1,4 @@
-import i18next from "../i18n";
+import i18next from "../../i18n";
 
 /**
  * Сервис для форматирования уведомлений о изменениях и удалениях сообщений
@@ -82,27 +82,6 @@ export class NotificationService {
       chatName: this.escapeMarkdown(chatName),
       messageId: idsText,
     });
-  }
-
-  /**
-   * Создает уведомление о статистике работы бота
-   */
-  static formatStatsNotification(stats: {
-    keys: number;
-    hits: number;
-    misses: number;
-  }): string {
-    return `${i18next.t("notifications.stats_title")}
-
-${i18next.t("notifications.stats_keys", { count: stats.keys })}
-${i18next.t("notifications.stats_hits", { count: stats.hits })}
-${i18next.t("notifications.stats_misses", { count: stats.misses })}
-${i18next.t("notifications.stats_hit_rate", {
-  rate:
-    stats.hits + stats.misses > 0
-      ? Math.round((stats.hits / (stats.hits + stats.misses)) * 100)
-      : 0,
-})}`;
   }
 
   /**

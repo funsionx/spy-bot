@@ -1,7 +1,7 @@
 import { createClient, RedisClientType } from "redis";
 import type { CachedMessage } from "../../types/telegram.js";
-import type { ICacheService } from "./ICacheService.js";
-import { Logger } from "../logger.js";
+import type { ICacheService } from "./cache.service.interface.js";
+import { Logger } from "../logger-service/logger.service.js";
 
 /**
  * Реализация кэша с использованием Redis
@@ -133,47 +133,6 @@ export class RedisCacheService implements ICacheService {
     const key = this.generateKey(businessConnectionId, chatId, messageId);
     await this.client.del(key);
     this.logger.info(`Сообщение удалено из Redis: ${key}`);
-  }
-
-  async getStats(): Promise<{ keys: number; hits: number; misses: number }> {
-    if (!this.connected) {
-      await this.connect();
-    }
-
-    try {
-      // Получаем количество ключей с нашим префиксом
-      const keys = await this.client.keys("*:*:*"); // Наш формат ключей
-      return {
-        keys: keys.length,
-        hits: this.stats.hits,
-        misses: this.stats.misses,
-      };
-    } catch (error) {
-      this.logger.error("Ошибка получения статистики Redis:", error);
-      return {
-        keys: 0,
-        hits: this.stats.hits,
-        misses: this.stats.misses,
-      };
-    }
-  }
-
-  async clearCache(): Promise<void> {
-    if (!this.connected) {
-      await this.connect();
-    }
-
-    try {
-      // Получаем все ключи с нашим форматом и удаляем их
-      const keys = await this.client.keys("*:*:*");
-      if (keys.length > 0) {
-        await this.client.del(keys);
-      }
-      this.stats = { hits: 0, misses: 0 };
-      this.logger.info(`Redis кэш очищен (удалено ${keys.length} ключей)`);
-    } catch (error) {
-      this.logger.error("Ошибка очистки Redis кэша:", error);
-    }
   }
 
   async disconnect(): Promise<void> {

@@ -1,9 +1,10 @@
 import type { Context } from "telegraf";
 import type { BusinessMessage, CachedMessage } from "../types/telegram.js";
-import type { ICacheService } from "../services/cache/ICacheService.js";
-import { NotificationService } from "../services/notificationService.js";
-import { Logger } from "../services/logger.js";
+import type { ICacheService } from "../services/cache-service/cache.service.interface.js";
+import { NotificationService } from "../services/notification-service/notification.service.js";
+import { Logger } from "../services/logger-service/logger.service.js";
 import i18next from "../i18n.js";
+import { TelegramService } from "../services/telegram-service/telegram.service.js";
 
 /**
  * Обработчик изменений сообщений через Telegram Business API
@@ -13,11 +14,7 @@ export class MessageEditHandler {
   constructor(
     private cacheService: ICacheService,
     private ownerId: number,
-    private sendContentMessage: (
-      chatId: number,
-      text: string,
-      s3Key?: string | null
-    ) => Promise<void>
+    private telegramService: TelegramService
   ) {}
 
   /**
@@ -116,7 +113,7 @@ export class MessageEditHandler {
     const beforeCaption = `${i18next.t("common.before")}\n${
       oldText || i18next.t("common.message_without_text")
     }`;
-    await this.sendContentMessage(
+    await this.telegramService.sendContentMessage(
       this.ownerId,
       beforeCaption,
       originalMessage.s3Key
@@ -129,7 +126,7 @@ export class MessageEditHandler {
         : i18next.t("common.message_without_text"));
 
     const afterCaption = `${i18next.t("common.after")}\n${afterTextContent}`;
-    await this.sendContentMessage(
+    await this.telegramService.sendContentMessage(
       this.ownerId,
       afterCaption,
       originalMessage.s3Key

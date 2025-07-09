@@ -1,10 +1,11 @@
 import type { Context } from "telegraf";
 import type { DeletedBusinessMessages, CachedMessage } from "../types/telegram";
-import type { ICacheService } from "../services/cache/ICacheService";
-import { NotificationService } from "../services/notificationService";
-import type { S3Service } from "../services/s3Service";
-import { Logger } from "../services/logger";
+import type { ICacheService } from "../services/cache-service/cache.service.interface";
+import { NotificationService } from "../services/notification-service/notification.service";
+import type { S3Service } from "../services/s3-service/s3.service";
+import { Logger } from "../services/logger-service/logger.service";
 import i18next from "../i18n";
+import { TelegramService } from "../services/telegram-service/telegram.service";
 
 /**
  * Обработчик удаления сообщений через Telegram Business API
@@ -15,11 +16,7 @@ export class MessageDeleteHandler {
   constructor(
     private cacheService: ICacheService,
     private ownerId: number,
-    private sendContentMessage: (
-      chatId: number,
-      text: string,
-      s3Key?: string | null
-    ) => Promise<void>,
+    private telegramService: TelegramService,
     private s3Service?: S3Service
   ) {}
 
@@ -143,7 +140,7 @@ export class MessageDeleteHandler {
         const deletedCaption = `${i18next.t("common.deleted")}\n${
           message.text || i18next.t("common.message_without_text")
         }`;
-        await this.sendContentMessage(
+        await this.telegramService.sendContentMessage(
           this.ownerId,
           deletedCaption,
           message.s3Key
@@ -180,7 +177,7 @@ export class MessageDeleteHandler {
               120
             );
           }
-          await this.sendContentMessage(
+          await this.telegramService.sendContentMessage(
             this.ownerId,
             deletedCaption,
             message.s3Key

@@ -10,13 +10,14 @@ import { Message } from "telegraf/types";
 import moment from "moment";
 import path from "path";
 import { Readable } from "stream";
-import { Logger } from "./logger";
+import { Logger } from "../logger-service/logger.service";
 
 export class S3Service {
   private s3: S3Client;
   private bucketName: string;
   private bot: Telegraf<any>;
   private logger = Logger.getInstance();
+  private scheduledDeletions = new Map<string, NodeJS.Timeout>();
 
   constructor(bot: Telegraf<any>) {
     if (
@@ -130,6 +131,47 @@ export class S3Service {
       this.logger.info(`Файл удален из S3: ${key}`);
     } catch (error) {
       this.logger.error(`Ошибка при удалении файла из S3 ${key}:`, error);
+    }
+  }
+
+  /**
+   * Запланировать удаление файла из S3 через определенное время
+   */
+  scheduleFileDeletion(key: string, delayMs: number): void {
+    const timeoutId = setTimeout(() => {
+      this.logger.info(`Сработало автоудаление для S3 ключа: ${key}`);
+      this.deleteFile(key);
+      this.scheduledDeletions.delete(key);
+    }, delayMs);
+    this.scheduledDeletions.set(key, timeoutId);
+    this.logger.info(`Запланировано удаление для S3 ключа: ${key}`);
+  }
+
+  /**
+   * Отменить запланированное удаление файла
+   */
+  cancelFileDeletion(key: string): void {
+    const timeoutId = this.scheduledDeletions.get(key);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      this.scheduledDeletions.delete(key);
+      this.logger.info(`Автоудаление отменено для S3 ключа: ${key}`);
+    }
+  }
+
+  /**
+   * Отменить все запланированные удаления (при остановке бота)
+   */
+  cancelAllScheduledDeletions(): void {
+    if (this.scheduledDeletions.size > 0) {
+      this.logger.info(
+        `Очистка ${this.scheduledDeletions.size} запланированных удалений...`
+      );
+      for (const timeoutId of this.scheduledDeletions.values()) {
+        clearTimeout(timeoutId);
+      }
+      this.scheduledDeletions.clear();
+      this.logger.info("Все запланированные удаления отменены.");
     }
   }
 
