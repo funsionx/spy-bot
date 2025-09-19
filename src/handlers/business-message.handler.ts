@@ -4,13 +4,19 @@ import { BusinessMessage, CachedMessage } from "../types/telegram";
 import { ICacheService } from "../services/cache-service/cache.service.interface";
 import { S3Service } from "../services/s3-service/s3.service";
 import { Logger } from "../services/logger-service/logger.service";
+import {
+  SubscriptionService,
+  SubscriptionStatus,
+} from "../services/subscription-service/subscription.service";
+import i18next from "../i18n";
 
 export class BusinessMessageHandler {
   private logger = Logger.getInstance();
 
   constructor(
     private cacheService: ICacheService,
-    private s3Service: S3Service | undefined
+    private s3Service: S3Service | undefined,
+    private subscriptionService: SubscriptionService
   ) {}
 
   public async handle(ctx: Context) {
@@ -20,43 +26,61 @@ export class BusinessMessageHandler {
       return;
     }
 
+    const userId = message.from.id;
+    const subscriptionStatus =
+      await this.subscriptionService.getUserSubscriptionStatus(userId);
+
+    // Ограничение на 1 чат для FREE-пользователей
+    if (subscriptionStatus === "FREE") {
+      const trackedChatId = await this.subscriptionService.getTrackedChatId(
+        userId
+      );
+
+      if (trackedChatId && trackedChatId !== message.chat.id) {
+        this.logger.info(
+          `Пользователь ${userId} (FREE) пытается отслеживать новый чат. Отклонено.`
+        );
+        return;
+      }
+      if (!trackedChatId) {
+        // Начинаем отслеживать этот чат
+        await this.subscriptionService.setTrackedChatId(
+          userId,
+          message.chat.id
+        );
+        this.logger.info(
+          `Пользователь ${userId} (FREE) начал отслеживать чат ${message.chat.id}`
+        );
+      }
+    }
+
     let textForCache: string;
     let s3Key: string | null = null;
 
-    // Это медиа-сообщение
     if (this.isMediaMessage(message)) {
       if (!this.s3Service) {
         this.logger.warn(
           "Получено медиа-сообщение, но S3 не настроен. Сообщение не будет закэшировано."
         );
-        return; // Не кэшируем, если не можем обработать
+        return;
       }
-
-      const mediaMessage = message as
-        | Message.PhotoMessage
-        | Message.VideoMessage
-        | Message.VoiceMessage
-        | Message.VideoNoteMessage
-        | Message.DocumentMessage;
+      const mediaMessage = message as Message.PhotoMessage &
+        Message.VideoMessage &
+        Message.VoiceMessage &
+        Message.VideoNoteMessage &
+        Message.DocumentMessage;
       s3Key = await this.s3Service.uploadMedia(mediaMessage);
-
       if (!s3Key) {
-        // Ошибка уже залогирована в s3Service
         this.logger.warn(
           "Загрузка медиа в S3 не удалась, сообщение не будет закэшировано."
         );
-        return; // Не кэшируем при ошибке загрузки
+        return;
       }
-
-      textForCache = (mediaMessage as any).caption || `[Медиафайл]`;
-    }
-    // Это текстовое сообщение
-    else if (message.text) {
+      textForCache = mediaMessage.caption || i18next.t("common.media_file");
+    } else if (message.text) {
       textForCache = message.text;
-    }
-    // Это что-то другое, что мы не обрабатываем (стикер, локация и т.д.)
-    else {
-      textForCache = "[Сообщение без текста или неподдерживаемого типа]";
+    } else {
+      textForCache = i18next.t("common.message_without_text");
     }
 
     if (s3Key && this.s3Service) {
@@ -68,7 +92,6 @@ export class BusinessMessageHandler {
       text: textForCache,
       s3Key: s3Key,
     };
-
     await this.cacheService.cacheMessage(cachedMessage);
   }
 

@@ -4,6 +4,9 @@ import { Logger } from "../logger-service/logger.service";
 import path from "path";
 import i18next from "../../i18n";
 
+/**
+ * TelegramService — фасад для отправки сообщений и медиа с опциональной привязкой к треду.
+ */
 export class TelegramService {
   private logger = Logger.getInstance();
 
@@ -13,14 +16,14 @@ export class TelegramService {
   ) {}
 
   /**
-   * Отправляет контент сообщения (текст и/или медиа)
+   * Отправляет контент сообщения (текст и/или медиа). Если передан replyToMessageId — ответом на него.
    */
   public async sendContentMessage(
     chatId: number,
     text: string,
-    s3Key?: string | null
+    s3Key?: string | null,
+    replyToMessageId?: number
   ): Promise<void> {
-    // Если есть медиа, пробуем его отправить
     if (s3Key && this.s3Service) {
       const fileData = await this.s3Service.getFile(s3Key);
       if (fileData?.body) {
@@ -28,9 +31,9 @@ export class TelegramService {
           chatId,
           s3Key,
           fileData.body as NodeJS.ReadableStream,
-          text
+          text,
+          replyToMessageId
         );
-        // Если медиа отправлено успешно, выходим
         return;
       }
       this.logger.warn(
@@ -38,31 +41,40 @@ export class TelegramService {
       );
     }
 
-    // Если медиа нет, или не удалось его получить, или текста вообще нет
+    const extra: any = {};
+    if (replyToMessageId) {
+      extra.reply_parameters = { message_id: replyToMessageId };
+    }
+
     if (text) {
-      await this.bot.telegram.sendMessage(chatId, text, {
-        parse_mode: "MarkdownV2",
-      });
+      await this.bot.telegram.sendMessage(chatId, text, extra);
     }
   }
 
   /**
-   * Отправляет медиафайл, определяя его тип по ключу S3
+   * Отправляет медиафайл, определяя его тип по ключу S3. По возможности указывает filename.
    */
   public async sendMedia(
     chatId: number,
     key: string,
     fileStream: NodeJS.ReadableStream,
-    caption?: string
+    caption?: string,
+    replyToMessageId?: number
   ) {
-    const keyParts = path.basename(key, path.extname(key)).split("_");
-    const mediaType = keyParts[keyParts.length - 1];
-    const source = { source: fileStream };
+    const baseName = path.basename(key);
+    const ext = path.extname(baseName);
+    const nameOnly = baseName.replace(ext, "");
+    const parts = nameOnly.split("_");
+    const mediaType = parts[parts.length - 1];
 
-    const captionOptions = caption
-      ? { caption, parse_mode: "MarkdownV2" as const }
-      : undefined;
-    const voiceCaptionOptions = caption ? { caption } : undefined;
+    const source = { source: fileStream, filename: baseName } as any;
+
+    const extraBase: any = {};
+    if (replyToMessageId) {
+      extraBase.reply_parameters = { message_id: replyToMessageId };
+    }
+
+    const captionOptions = caption ? { caption, ...extraBase } : extraBase;
 
     try {
       switch (mediaType) {
@@ -73,14 +85,16 @@ export class TelegramService {
           await this.bot.telegram.sendPhoto(chatId, source, captionOptions);
           break;
         case "voice":
-          await this.bot.telegram.sendVoice(
-            chatId,
-            source,
-            voiceCaptionOptions
-          );
+          await this.bot.telegram.sendVoice(chatId, source, extraBase);
+          if (caption) {
+            await this.bot.telegram.sendMessage(chatId, caption, extraBase);
+          }
           break;
         case "videonote":
-          await this.bot.telegram.sendVideoNote(chatId, source);
+          await this.bot.telegram.sendVideoNote(chatId, source, extraBase);
+          if (caption) {
+            await this.bot.telegram.sendMessage(chatId, caption, extraBase);
+          }
           break;
         default:
           await this.bot.telegram.sendDocument(chatId, source, captionOptions);
@@ -90,7 +104,8 @@ export class TelegramService {
       this.logger.error(`Ошибка при отправке медиа файла ${key}:`, error);
       await this.bot.telegram.sendMessage(
         chatId,
-        i18next.t("notifications.file_not_found")
+        i18next.t("notifications.file_not_found"),
+        extraBase
       );
     }
   }

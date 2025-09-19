@@ -34,11 +34,15 @@ export class Logger {
 
     if (args.length > 0) {
       const formattedArgs = args
-        .map((arg) =>
-          typeof arg === "object" && arg !== null
-            ? JSON.stringify(arg, null, 2)
-            : arg
-        )
+        .map((arg) => {
+          if (arg instanceof Error) {
+            return arg.stack || arg.message;
+          }
+          if (typeof arg === "object" && arg !== null) {
+            return JSON.stringify(arg, null, 2);
+          }
+          return arg;
+        })
         .join(" ");
       formattedMessage += ` ${formattedArgs}`;
     }

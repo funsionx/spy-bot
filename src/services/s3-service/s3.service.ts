@@ -69,17 +69,21 @@ export class S3Service {
 
       const fileBuffer = Buffer.from(await response.arrayBuffer());
 
-      const fileExtension =
-        path.extname(new URL(fileLink.href).pathname) || ".dat";
+      const contentType = response.headers.get("content-type") || undefined;
+      const extension = this.getFileExtension(
+        message,
+        contentType,
+        fileLink.href
+      );
       const mediaType = this.getMediaType(message);
       const timestamp = moment().format("HH-mm-ss_DD-MM-YYYY");
-      const s3Key = `spy-bot-media/${message.from.id}/${timestamp}_${mediaType}${fileExtension}`;
+      const s3Key = `spy-bot-media/${message.from.id}/${timestamp}_${mediaType}${extension}`;
 
       const putCommand = new PutObjectCommand({
         Bucket: this.bucketName,
         Key: s3Key,
         Body: fileBuffer,
-        ContentType: response.headers.get("content-type") || undefined,
+        ContentType: contentType,
         ContentLength: fileBuffer.length,
       });
 
@@ -255,5 +259,69 @@ export class S3Service {
     if ("video" in message) return "video";
     if ("photo" in message) return "photo";
     return "document";
+  }
+
+  private getFileExtension(
+    message:
+      | Message.VideoMessage
+      | Message.PhotoMessage
+      | Message.VoiceMessage
+      | Message.VideoNoteMessage
+      | Message.DocumentMessage,
+    contentType?: string,
+    href?: string
+  ): string {
+    // 1) Используем исходное имя файла, если доступно
+    if ("document" in message && message.document?.file_name) {
+      const ext = path.extname(message.document.file_name);
+      if (ext) return ext;
+    }
+    if ("video" in message && message.video?.file_name) {
+      const ext = path.extname(message.video.file_name);
+      if (ext) return ext;
+    }
+
+    // 2) Фото обычно jpeg
+    if ("photo" in message) {
+      return ".jpg";
+    }
+
+    // 3) Пробуем по URL
+    if (href) {
+      try {
+        const fromPath = path.extname(new URL(href).pathname);
+        if (fromPath && fromPath.length > 1) return fromPath;
+      } catch {}
+    }
+
+    // 4) По Content-Type
+    if (contentType) {
+      const map: Record<string, string> = {
+        "application/pdf": ".pdf",
+        "application/msword": ".doc",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+          ".docx",
+        "application/vnd.ms-excel": ".xls",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+          ".xlsx",
+        "application/vnd.ms-powerpoint": ".ppt",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+          ".pptx",
+        "application/zip": ".zip",
+        "application/x-zip-compressed": ".zip",
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "video/mp4": ".mp4",
+        "video/mpeg": ".mpeg",
+        "audio/ogg": ".ogg",
+        "audio/mpeg": ".mp3",
+        "application/octet-stream": ".bin",
+      };
+      if (map[contentType]) return map[contentType];
+    }
+
+    // 5) Fallback
+    return ".dat";
   }
 }

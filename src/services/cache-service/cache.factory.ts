@@ -23,7 +23,7 @@ export class CacheFactory {
       return redisService;
     } catch (error) {
       this.logger.error(
-        "Не удалось подключиться к Redis. Проверьте REDIS_URL.",
+        "Не удалось подключиться к Redis. Проверьте REDIS_URL/REDIS_PASSWORD.",
         error
       );
       throw new Error("Не удалось подключиться к Redis.");
@@ -35,14 +35,7 @@ export class CacheFactory {
    */
   static async createFromEnv(): Promise<ICacheService> {
     const ttlSeconds = parseInt(process.env.CACHE_TTL || "120", 10);
-    const redisUrl = process.env.REDIS_URL;
-
-    if (!redisUrl) {
-      this.logger.error(
-        "Переменная REDIS_URL не установлена. Redis является обязательным."
-      );
-      throw new Error("Переменная REDIS_URL не установлена.");
-    }
+    const redisUrl = process.env.REDIS_URL || "redis://redis:6379";
 
     this.logger.info(`Инициализация Redis кэша...`);
 

@@ -66,9 +66,7 @@ export class MessageEditHandler {
         chatName,
         [editedMessage.message_id]
       );
-      await ctx.telegram.sendMessage(this.ownerId, notification, {
-        parse_mode: "MarkdownV2",
-      });
+      await ctx.telegram.sendMessage(this.ownerId, notification);
       return;
     }
 
@@ -95,18 +93,11 @@ export class MessageEditHandler {
       : i18next.t("common.unknown_user");
     const chatName = NotificationService.getChatDisplayName(editedMessage.chat);
     const userUsername = editedMessage.from?.username;
-    const usernameLine = userUsername
-      ? `\n👤 \`${NotificationService.escapeForCode(userUsername)}\``
-      : "";
+    const usernameLine = userUsername ? `\n@${userUsername}` : "";
 
-    const contextNotification = i18next.t("notifications.edited", {
-      userName: NotificationService.escapeMarkdown(userName),
-      chatName: NotificationService.escapeMarkdown(chatName),
-      usernameLine,
-    });
+    const contextText = `🔄 ${userName} изменил(а) сообщение в чате с "${chatName}":${usernameLine}`;
 
-    await ctx.telegram.sendMessage(this.ownerId, contextNotification, {
-      parse_mode: "MarkdownV2",
+    const sent = await ctx.telegram.sendMessage(this.ownerId, contextText, {
       link_preview_options: { is_disabled: true },
     });
 
@@ -116,20 +107,20 @@ export class MessageEditHandler {
     await this.telegramService.sendContentMessage(
       this.ownerId,
       beforeCaption,
-      originalMessage.s3Key
+      originalMessage.s3Key,
+      sent.message_id
     );
 
     const afterTextContent =
       newText ||
-      (originalMessage.s3Key
-        ? "" // Если у медиа удалили подпись, newText будет пустым
-        : i18next.t("common.message_without_text"));
+      (originalMessage.s3Key ? "" : i18next.t("common.message_without_text"));
 
     const afterCaption = `${i18next.t("common.after")}\n${afterTextContent}`;
     await this.telegramService.sendContentMessage(
       this.ownerId,
       afterCaption,
-      originalMessage.s3Key
+      originalMessage.s3Key,
+      sent.message_id
     );
 
     const newCachedMessage: CachedMessage = {

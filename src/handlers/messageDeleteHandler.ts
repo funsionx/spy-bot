@@ -68,9 +68,7 @@ export class MessageDeleteHandler {
         chatName,
         missedMessageIds
       );
-      await ctx.telegram.sendMessage(this.ownerId, notification, {
-        parse_mode: "MarkdownV2",
-      });
+      await ctx.telegram.sendMessage(this.ownerId, notification);
     }
 
     for (const messageId of deletedMessages.message_ids) {
@@ -109,25 +107,20 @@ export class MessageDeleteHandler {
         ? NotificationService.getUserDisplayName(firstMessage.from)
         : i18next.t("common.unknown_user");
       const userUsername = firstMessage.from?.username;
-      const usernameLine = userUsername
-        ? `\n👤 \`${NotificationService.escapeForCode(userUsername)}\``
-        : "";
+      const usernameLine = userUsername ? `\n@${userUsername}` : "";
 
       if (userMessages.length === 1) {
         // --- Одно удаленное сообщение ---
         const message = userMessages[0];
         if (!message) continue; // Проверка на существование
 
-        const contextNotification = i18next.t("notifications.deleted", {
-          userName: NotificationService.escapeMarkdown(userName),
-          chatName: NotificationService.escapeMarkdown(chatName),
-          usernameLine,
-        });
+        const contextNotification = `🗑️ ${userName} удалил(а) сообщение в чате с "${chatName}":${usernameLine}`;
 
-        await ctx.telegram.sendMessage(this.ownerId, contextNotification, {
-          parse_mode: "MarkdownV2",
-          link_preview_options: { is_disabled: true },
-        });
+        const sent = await ctx.telegram.sendMessage(
+          this.ownerId,
+          contextNotification,
+          { link_preview_options: { is_disabled: true } }
+        );
 
         if (message.s3Key) {
           this.cacheService.setValue(
@@ -143,24 +136,18 @@ export class MessageDeleteHandler {
         await this.telegramService.sendContentMessage(
           this.ownerId,
           deletedCaption,
-          message.s3Key
+          message.s3Key,
+          sent.message_id
         );
       } else {
         // --- Несколько удаленных сообщений ---
-        const contextNotification = i18next.t(
-          "notifications.deleted_multiple",
-          {
-            userName: NotificationService.escapeMarkdown(userName),
-            chatName: NotificationService.escapeMarkdown(chatName),
-            usernameLine,
-            count: userMessages.length,
-          }
-        );
+        const contextNotification = `🗑️ ${userName} удалил(а) ${userMessages.length} сообщений в чате "${chatName}":${usernameLine}`;
 
-        await ctx.telegram.sendMessage(this.ownerId, contextNotification, {
-          parse_mode: "MarkdownV2",
-          link_preview_options: { is_disabled: true },
-        });
+        const sent = await ctx.telegram.sendMessage(
+          this.ownerId,
+          contextNotification,
+          { link_preview_options: { is_disabled: true } }
+        );
 
         for (let i = 0; i < userMessages.length; i++) {
           const message = userMessages[i];
@@ -180,7 +167,8 @@ export class MessageDeleteHandler {
           await this.telegramService.sendContentMessage(
             this.ownerId,
             deletedCaption,
-            message.s3Key
+            message.s3Key,
+            sent.message_id
           );
         }
       }

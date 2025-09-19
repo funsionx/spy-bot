@@ -6,22 +6,22 @@
     "media_saved": "🖼️ Media file saved. Use command to get it: `{{command}}`",
     "media_saved_latest": "🖼️ Media file saved. Use command to get it: `{{command}}`",
     "media_caption_changed": "(media caption was changed/deleted)",
-    "original_not_found": "⚠️ In chat \"{{chatName}}\" a message with ID {{messageId}} was deleted/edited, but the original text was not found in the cache.\n\nThis can happen if:\n• The message was sent before the bot was started\n• The cache was cleared\n• The message is older than 2 minutes",
-    "welcome": "🎯 *Welcome to Dialog Spy Bot\\!*",
-    "welcome_message": "This bot helps you track edits and deletions in your business chats.",
-    "access_denied": "❌ You do not have access to this bot.",
-    "access_denied_command": "❌ You do not have access to this command.",
-    "s3_not_configured": "⚠️ S3 service is not configured.",
-    "file_not_found": "❌ Could not retrieve the file.",
-    "latest_media_not_found": "❌ Latest media file not found.",
-    "get_media_error": "❌ Failed to get the file. Check the logs.",
-    "business_connection_enabled": "✅ *Business connection activated\\!*",
+    "original_not_found": "⚠️ In chat \"{{chatName}}\" a message with {{messageId}} was deleted/edited, but the original text was not found in the cache",
+    "welcome": "🎯 *Welcome to TruthTellerBot!*",
+    "welcome_message": "This bot helps you track edits and deletions in your business chats",
+    "access_denied": "❌ You do not have access to this bot",
+    "access_denied_command": "❌ You do not have access to this command",
+    "s3_not_configured": "⚠️ S3 service is not configured",
+    "file_not_found": "❌ Could not retrieve the file",
+    "latest_media_not_found": "❌ Latest media file not found",
+    "get_media_error": "❌ Failed to get the file. Check the logs",
+    "business_connection_enabled": "✅ *Business connection activated!*",
     "business_connection_disabled": "❌ *Business connection deactivated*",
     "connection_id": "🔗 ID: `{{id}}`",
     "connection_user": "👤 User: {{userName}}",
     "connection_date": "📅 Date: {{date}}",
-    "connection_enabled_message": "Now the bot will track changes in your chats.",
-    "connection_disabled_message": "The bot will no longer track changes in chats."
+    "connection_enabled_message": "Now the bot will track changes in your chats",
+    "connection_disabled_message": "The bot will no longer track changes in chats"
   },
   "common": {
     "media_file": "[Media File]",
@@ -40,11 +40,21 @@
     "start": "🏁 Start & Help",
     "get_latest_media": "🖼️ Get latest media",
     "help": "📖 Help",
-    "set_language": "🌐 Change language"
+    "set_language": "🌐 Change language",
+    "premium": "💎 Get Premium",
+    "referral": "🔗 Get referral link"
   },
-  "help_text": "📖 *Dialog Spy Bot Help*\n\n🔍 *Features:*\n• Track message edits\n• Track message deletions\n• Save deleted media\n• Real-time notifications\n\n⚙️ *Setup:*\n1\\. Telegram > Settings > Business\n2\\. Chat Bots > Add Bot\n3\\. Select this bot\n\n🎯 *Commands:*\n/start - start & help\n/get\\_latest\\_media - get latest media file\n/help - this help\n/set\\_language - change language\n\n⚠️ *Important:*\nThe bot does not save messages. All notifications are sent only to this chat.",
+  "help_text": "📖 *TruthTellerBot Help*\n\n🔍 *Features:*\n• Track message edits\n• Track message deletions\n• Save deleted media\n• Real-time notifications\n\n⚙️ *Setup:*\n1\\. Telegram > Settings > Business\n2\\. Chat Bots > Add Bot\n3\\. Select this bot\n\n🎯 *Commands:*\n/start — start & help\n/get\\_latest\\_media — get latest media file\n/help — this help\n/set\\_language — change language\n/premium — get premium access\n/referral — get referral link\n\n⚠️ *Important:*\nThe bot does not save messages. All notifications are sent only to this chat.",
   "language": {
     "select": "Please select a language:",
     "changed": "✅ Language has been successfully changed to: {{lang}}"
+  },
+  "premium": {
+    "info": "💎 *Premium gives you:*\n\n• Unlimited chats\n• All content types (photos, videos, files)\n• Priority support",
+    "buy_button": "Buy Premium"
+  },
+  "referral": {
+    "title": "🔗 *Your referral link:*",
+    "button_open": "Open"
   }
 }

@@ -54,7 +54,7 @@ export class NotificationService {
   public static escapeMarkdown(text: string): string {
     if (!text) return "";
     // Полный список символов для экранирования в MarkdownV2
-    const toEscape = /[_*[\]()~`>#+\-=|{}.!]/g;
+    const toEscape = /[_*\[\]()~`>#+\-=|{}.!]/g;
     return text.replace(toEscape, "\\$&");
   }
 
@@ -78,8 +78,9 @@ export class NotificationService {
         ? `ID ${messageIds[0]}`
         : `IDs: ${messageIds.join(", ")}`;
 
+    // Возвращаем простой текст без Markdown для избежания ошибок парсинга
     return i18next.t("notifications.original_not_found", {
-      chatName: this.escapeMarkdown(chatName),
+      chatName,
       messageId: idsText,
     });
   }

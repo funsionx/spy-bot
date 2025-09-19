@@ -4,7 +4,8 @@ import type { ICacheService } from "./cache.service.interface.js";
 import { Logger } from "../logger-service/logger.service.js";
 
 /**
- * Реализация кэша с использованием Redis
+ * Реализация кэша на Redis.
+ * Хранит входящие сообщения с TTL, а также предоставляет KV-хранилище для вспомогательных данных.
  */
 export class RedisCacheService implements ICacheService {
   private client: RedisClientType;
@@ -16,10 +17,18 @@ export class RedisCacheService implements ICacheService {
   constructor(ttlSeconds: number = 120, redisUrl?: string) {
     this.ttlSeconds = ttlSeconds;
 
+    const url = redisUrl || process.env.REDIS_URL || "redis://redis:6379";
+
     // Создаем клиент Redis
-    this.client = createClient({
-      url: redisUrl || process.env.REDIS_URL || "redis://localhost:6379",
-    });
+    const clientOptions: any = {
+      url,
+    };
+
+    if (process.env.REDIS_PASSWORD) {
+      clientOptions.password = process.env.REDIS_PASSWORD;
+    }
+
+    this.client = createClient(clientOptions);
 
     // Обработка ошибок
     this.client.on("error", (err: Error) => {
@@ -41,12 +50,16 @@ export class RedisCacheService implements ICacheService {
     });
   }
 
+  /** Подключение к Redis (лениво вызывается перед каждой операцией). */
   async connect(): Promise<void> {
     if (!this.connected) {
       await this.client.connect();
     }
   }
 
+  /**
+   * Сохраняет сообщение с ключом spy:{bcId}:{chatId}:{messageId} и TTL.
+   */
   async cacheMessage(message: CachedMessage): Promise<void> {
     if (!this.connected) {
       await this.connect();
@@ -67,6 +80,7 @@ export class RedisCacheService implements ICacheService {
     this.logger.info(`Сообщение закэшировано (Redis): ${key} | ${logText}`);
   }
 
+  /** Получает одно сообщение из кэша по businessConnectionId, chatId, messageId. */
   async getCachedMessage(
     businessConnectionId: string,
     chatId: number,
@@ -97,6 +111,7 @@ export class RedisCacheService implements ICacheService {
     }
   }
 
+  /** Получает несколько сообщений по списку идентификаторов. */
   async getCachedMessages(
     businessConnectionId: string,
     chatId: number,
@@ -121,6 +136,7 @@ export class RedisCacheService implements ICacheService {
     return messages;
   }
 
+  /** Удаляет одно сообщение из кэша. */
   async removeCachedMessage(
     businessConnectionId: string,
     chatId: number,
@@ -135,12 +151,14 @@ export class RedisCacheService implements ICacheService {
     this.logger.info(`Сообщение удалено из Redis: ${key}`);
   }
 
+  /** Закрывает соединение с Redis. */
   async disconnect(): Promise<void> {
     if (this.connected) {
       await this.client.quit();
     }
   }
 
+  /** Устанавливает KV значение (ttlSeconds = -1 для бессрочного хранения). */
   async setValue(
     key: string,
     value: string,
@@ -155,16 +173,19 @@ export class RedisCacheService implements ICacheService {
     }
   }
 
+  /** Получает KV значение по ключу. */
   async getValue(key: string): Promise<string | null> {
     if (!this.connected) await this.connect();
     return this.client.get(key);
   }
 
+  /** Удаляет KV значение. */
   async deleteValue(key: string): Promise<void> {
     if (!this.connected) await this.connect();
     await this.client.del(key);
   }
 
+  /** Формирует ключ хранения сообщения. */
   private generateKey(
     businessConnectionId: string,
     chatId: number,
