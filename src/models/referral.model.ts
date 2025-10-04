@@ -4,6 +4,7 @@ export interface IReferral extends Document {
   referrer: Types.ObjectId;
   referred: Types.ObjectId;
   createdAt: Date;
+  paidBonusGranted?: boolean;
 }
 
 const ReferralSchema = new Schema<IReferral>(
@@ -20,6 +21,7 @@ const ReferralSchema = new Schema<IReferral>(
       required: true,
       unique: true,
     },
+    paidBonusGranted: { type: Boolean, default: false },
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );

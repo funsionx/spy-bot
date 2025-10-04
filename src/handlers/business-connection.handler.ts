@@ -26,34 +26,38 @@ export class BusinessConnectionHandler {
         );
         const connectionId = NotificationService.escapeMarkdown(connection.id);
         const dateStr = NotificationService.escapeMarkdown(
-          new Date(connection.date * 1000).toLocaleString("ru-RU")
+          new Date(connection.date * 1000).toLocaleString(i18next.language)
         );
 
-        await ctx.telegram.sendMessage(
-          this.ownerId,
-          `${i18next.t(
-            "notifications.business_connection_enabled"
-          )}\n\n${i18next.t("notifications.connection_id", {
-            id: connectionId,
-          })}\n${i18next.t("notifications.connection_user", {
-            userName,
-          })}\n${i18next.t("notifications.connection_date", {
-            date: dateStr,
-          })}\n\n${i18next.t("notifications.connection_enabled_message")}`,
-          { parse_mode: "MarkdownV2" }
+        const notification = i18next.t(
+          "notifications.business_connection_enabled_v2",
+          {
+            title: i18next.t("notifications.business_connection_enabled"),
+            id: i18next.t("notifications.connection_id", { id: connectionId }),
+            user: i18next.t("notifications.connection_user", { userName }),
+            date: i18next.t("notifications.connection_date", { date: dateStr }),
+            message: i18next.t("notifications.connection_enabled_message"),
+          }
         );
+
+        await ctx.telegram.sendMessage(this.ownerId, notification, {
+          parse_mode: "MarkdownV2",
+        });
       } else {
         const connectionId = NotificationService.escapeMarkdown(connection.id);
 
-        await ctx.telegram.sendMessage(
-          this.ownerId,
-          `${i18next.t(
-            "notifications.business_connection_disabled"
-          )}\n\n${i18next.t("notifications.connection_id", {
-            id: connectionId,
-          })}\n\n${i18next.t("notifications.connection_disabled_message")}`,
-          { parse_mode: "MarkdownV2" }
+        const notification = i18next.t(
+          "notifications.business_connection_disabled_v2",
+          {
+            title: i18next.t("notifications.business_connection_disabled"),
+            id: i18next.t("notifications.connection_id", { id: connectionId }),
+            message: i18next.t("notifications.connection_disabled_message"),
+          }
         );
+
+        await ctx.telegram.sendMessage(this.ownerId, notification, {
+          parse_mode: "MarkdownV2",
+        });
       }
     } catch (error) {
       this.logger.error("Ошибка обработки business_connection:", error);

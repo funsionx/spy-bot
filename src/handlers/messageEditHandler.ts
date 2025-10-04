@@ -5,6 +5,8 @@ import { NotificationService } from "../services/notification-service/notificati
 import { Logger } from "../services/logger-service/logger.service.js";
 import i18next from "../i18n.js";
 import { TelegramService } from "../services/telegram-service/telegram.service.js";
+import { SubscriptionService } from "../services/subscription-service/subscription.service.js";
+import { Markup } from "telegraf";
 
 /**
  * Обработчик изменений сообщений через Telegram Business API
@@ -14,7 +16,8 @@ export class MessageEditHandler {
   constructor(
     private cacheService: ICacheService,
     private ownerId: number,
-    private telegramService: TelegramService
+    private telegramService: TelegramService,
+    private subscriptionService: SubscriptionService
   ) {}
 
   /**
@@ -49,6 +52,21 @@ export class MessageEditHandler {
       `Обнаружено изменение сообщения ID: ${editedMessage.message_id}`
     );
 
+    const subscriptionStatus =
+      await this.subscriptionService.getUserSubscriptionStatus(this.ownerId);
+    const trialActive = await this.subscriptionService.isTrialActive(
+      this.ownerId
+    );
+
+    if (subscriptionStatus === "FREE" && !trialActive) {
+      const trackedChatId = await this.subscriptionService.getTrackedChatId(
+        this.ownerId
+      );
+      if (trackedChatId && trackedChatId !== editedMessage.chat.id) {
+        return;
+      }
+    }
+
     const originalMessage = await this.cacheService.getCachedMessage(
       editedMessage.business_connection_id,
       editedMessage.chat.id,
@@ -59,19 +77,11 @@ export class MessageEditHandler {
       this.logger.warn(
         `Оригинальное сообщение не найдено в кэше для ID: ${editedMessage.message_id}`
       );
-      const chatName = NotificationService.getChatDisplayName(
-        editedMessage.chat
-      );
-      const notification = NotificationService.formatCacheMissNotification(
-        chatName,
-        [editedMessage.message_id]
-      );
-      await ctx.telegram.sendMessage(this.ownerId, notification);
       return;
     }
 
     const oldText = originalMessage.text || "";
-    const newText = editedMessage.text || "";
+    const newText = editedMessage.text || editedMessage.caption || "";
 
     if (oldText === newText) {
       this.logger.info(
@@ -95,33 +105,41 @@ export class MessageEditHandler {
     const userUsername = editedMessage.from?.username;
     const usernameLine = userUsername ? `\n@${userUsername}` : "";
 
-    const contextText = `🔄 ${userName} изменил(а) сообщение в чате с "${chatName}":${usernameLine}`;
+    const hasMedia = !!originalMessage.s3Key;
+    const mediaIndicator = hasMedia ? " 📎" : "";
 
-    const sent = await ctx.telegram.sendMessage(this.ownerId, contextText, {
-      link_preview_options: { is_disabled: true },
+    const oldTextFormatted =
+      oldText || i18next.t("common.message_without_text");
+    const newTextFormatted =
+      newText || i18next.t("common.message_without_text");
+
+    const mediaInfo = hasMedia
+      ? i18next.t("notifications.media_info")
+      : "";
+
+    const notification = i18next.t("notifications.edited_v2", {
+      mediaIndicator,
+      userName,
+      usernameLine,
+      chatName,
+      mediaInfo,
+      oldTextFormatted,
+      newTextFormatted,
     });
 
-    const beforeCaption = `${i18next.t("common.before")}\n${
-      oldText || i18next.t("common.message_without_text")
-    }`;
-    await this.telegramService.sendContentMessage(
-      this.ownerId,
-      beforeCaption,
-      originalMessage.s3Key,
-      sent.message_id
-    );
+    const sent = await ctx.telegram.sendMessage(this.ownerId, notification, {
+      link_preview_options: { is_disabled: true },
+      parse_mode: "MarkdownV2",
+    });
 
-    const afterTextContent =
-      newText ||
-      (originalMessage.s3Key ? "" : i18next.t("common.message_without_text"));
-
-    const afterCaption = `${i18next.t("common.after")}\n${afterTextContent}`;
-    await this.telegramService.sendContentMessage(
-      this.ownerId,
-      afterCaption,
-      originalMessage.s3Key,
-      sent.message_id
-    );
+    if (hasMedia) {
+      await this.telegramService.sendContentMessage(
+        this.ownerId,
+        "",
+        originalMessage.s3Key,
+        sent.message_id
+      );
+    }
 
     const newCachedMessage: CachedMessage = {
       ...originalMessage,

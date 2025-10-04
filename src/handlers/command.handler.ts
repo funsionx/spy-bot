@@ -24,6 +24,9 @@ export class CommandHandler {
     bot.command("set_language", this.handleSetLanguage.bind(this));
     bot.command("premium", this.handlePremium.bind(this));
     bot.command("referral", this.handleReferral.bind(this));
+    bot.command("feedback", this.handleFeedback.bind(this));
+    bot.action(/choose_chat_\-?\d+/, this.handleChooseChat.bind(this));
+    bot.action("invite_referral", this.handleInviteReferral.bind(this));
     bot.action(/set_lang_(ru|en)/, this.handleSetLanguageAction.bind(this));
 
     this.setupBotCommands(bot.telegram);
@@ -37,16 +40,22 @@ export class CommandHandler {
     try {
       if (this.subscriptionService) {
         const user = await this.subscriptionService.findOrCreateUser(userId);
+        // Отправляем приветствие отдельным сообщением без MarkdownV2
+        await ctx.reply(i18next.t("notifications.welcome"));
+
+        // Затем отправляем реферальную ссылку отдельным сообщением
         const botInfo = await (ctx.telegram as any).getMe();
         const botUsername: string = botInfo.username;
         const link = this.subscriptionService.getReferralLink(
           botUsername,
           user.userUuid
         );
-        const text = `${i18next.t("notifications.welcome")}\n\n${i18next.t(
-          "referral.title"
-        )}\n\n\`${link.replace(/-/g, "\\-")}\``;
-        await ctx.reply(text, { parse_mode: "MarkdownV2" });
+        const text = `${i18next.t("referral.title")}\n\n${link}`;
+        await ctx.reply(text, {
+          ...Markup.inlineKeyboard([
+            [Markup.button.url(i18next.t("referral.button_open"), link)],
+          ]),
+        });
       } else {
         await ctx.reply(i18next.t("notifications.welcome"));
       }
@@ -156,6 +165,7 @@ export class CommandHandler {
 
   private async sendHelpMessage(ctx: any): Promise<void> {
     const help = i18next.t("help_text");
+    // Отправляем как простой текст без MarkdownV2, чтобы избежать ошибок экранирования
     await ctx.reply(help, { parse_mode: "MarkdownV2" });
   }
 
@@ -166,7 +176,7 @@ export class CommandHandler {
     const botUsername: string = botInfo.username;
 
     if (!this.subscriptionService) {
-      await ctx.reply("Service unavailable");
+      await ctx.reply(i18next.t("notifications.service_unavailable"));
       return;
     }
     const user = await this.subscriptionService.findOrCreateUser(userId);
@@ -174,16 +184,60 @@ export class CommandHandler {
       botUsername,
       user.userUuid
     );
-    const text = `${i18next.t("referral.title")}\n\n\`${link.replace(
-      /-/g,
-      "\\-"
-    )}\``;
+    const text = `${i18next.t("referral.title")}\n\n${link}`;
     await ctx.reply(text, {
-      parse_mode: "MarkdownV2",
       ...Markup.inlineKeyboard([
         Markup.button.url(i18next.t("referral.button_open"), link),
       ]),
     });
+  }
+
+  private async handleInviteReferral(ctx: Context) {
+    const userId = ctx.from?.id;
+    if (!userId) return;
+    if (!this.subscriptionService) {
+      await ctx.answerCbQuery(i18next.t("notifications.service_unavailable"), {
+        show_alert: true,
+      });
+      return;
+    }
+    const botInfo = await (ctx.telegram as any).getMe();
+    const botUsername: string = botInfo.username;
+    const user = await this.subscriptionService.findOrCreateUser(userId);
+    const link = this.subscriptionService.getReferralLink(
+      botUsername,
+      user.userUuid
+    );
+    const text = `${i18next.t("referral.title")}\n\n${link}`;
+    await (ctx as any).reply(text, {
+      ...Markup.inlineKeyboard([
+        [Markup.button.url(i18next.t("referral.button_open"), link)],
+      ]),
+    });
+    await ctx.answerCbQuery();
+  }
+
+  private async handleFeedback(ctx: Context) {
+    await ctx.reply(i18next.t("feedback.prompt"));
+  }
+
+  private async handleChooseChat(ctx: Context & { match: RegExpExecArray }) {
+    const userId = ctx.from?.id;
+    if (!userId) return;
+    if (!this.subscriptionService) return;
+    // Парсим chatId из callback data
+    const data = (ctx as any).callbackQuery?.data as string;
+    const chatIdStr = data?.split("choose_chat_")[1];
+    const chatId = chatIdStr ? parseInt(chatIdStr, 10) : NaN;
+    if (Number.isNaN(chatId)) {
+      await ctx.answerCbQuery(i18next.t("notifications.invalid_chat"), {
+        show_alert: true,
+      });
+      return;
+    }
+    await this.subscriptionService.setTrackedChatId(userId, chatId);
+    await ctx.editMessageText(i18next.t("limits.chat_selected"));
+    await ctx.answerCbQuery();
   }
 
   public async setupBotCommands(telegram: Telegram): Promise<void> {
@@ -203,6 +257,7 @@ export class CommandHandler {
       },
       { command: "premium", description: i18next.t("commands.premium") },
       { command: "referral", description: i18next.t("commands.referral") },
+      { command: "feedback", description: i18next.t("commands.feedback") },
     ];
     await telegram.setMyCommands(commands);
     this.logger.info("Команды бота настроены");

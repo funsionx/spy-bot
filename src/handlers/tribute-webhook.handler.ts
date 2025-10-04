@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import { Logger } from "../services/logger-service/logger.service";
 import { SubscriptionService } from "../services/subscription-service/subscription.service";
+import { ReferralModel } from "../models/referral.model";
+import { UserModel } from "../models/user.model";
 import type { TributeWebhookPayload } from "../types/tribute";
 import { Telegraf } from "telegraf";
 
@@ -54,11 +56,36 @@ export class TributeWebhookHandler {
     try {
       switch (name) {
         case "new_subscription":
-          await this.subscriptionService.setUserSubscriptionStatus(
-            telegramId,
-            "PREMIUM",
-            expiresAt
-          );
+          {
+            const user =
+              await this.subscriptionService.setUserSubscriptionStatus(
+                telegramId,
+                "PREMIUM",
+                expiresAt
+              );
+            // Если у пользователя есть реферер — даём ему +3 недели, один раз
+            try {
+              const rel = await ReferralModel.findOne({
+                referred: user._id,
+              }).exec();
+              if (rel && !rel.paidBonusGranted) {
+                const referrer = await UserModel.findById(rel.referrer).exec();
+                if (referrer) {
+                  await this.subscriptionService.grantWeeksToUser(referrer, 3);
+                  rel.paidBonusGranted = true;
+                  await rel.save();
+                  this.logger.info(
+                    `Выдан бонус +3 недели рефереру ${referrer.telegramId} за платёж пользователя ${telegramId}`
+                  );
+                }
+              }
+            } catch (e) {
+              this.logger.warn(
+                "Не удалось обработать реферальный бонус за оплату",
+                e as any
+              );
+            }
+          }
           // Пытаемся поблагодарить пользователя
           try {
             await this.bot.telegram.sendMessage(

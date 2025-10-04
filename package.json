@@ -16,6 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.556.0",
     "@aws-sdk/s3-request-presigner": "^3.842.0",
+    "@highlight-run/node": "^3.12.22",
     "dotenv-cli": "^8.0.0",
     "i18next": "^23.16.7",
     "moment": "^2.30.1",

@@ -1,4 +1,4 @@
-import { Context } from "telegraf";
+import { Context, Markup } from "telegraf";
 import { Message } from "telegraf/types";
 import { BusinessMessage, CachedMessage } from "../types/telegram";
 import { ICacheService } from "../services/cache-service/cache.service.interface";
@@ -16,7 +16,8 @@ export class BusinessMessageHandler {
   constructor(
     private cacheService: ICacheService,
     private s3Service: S3Service | undefined,
-    private subscriptionService: SubscriptionService
+    private subscriptionService: SubscriptionService,
+    private ownerId: number
   ) {}
 
   public async handle(ctx: Context) {
@@ -26,12 +27,14 @@ export class BusinessMessageHandler {
       return;
     }
 
-    const userId = message.from.id;
+    // Управление подпиской и лимитами ведём для владельца бота
+    const userId = this.ownerId;
     const subscriptionStatus =
       await this.subscriptionService.getUserSubscriptionStatus(userId);
+    const trialActive = await this.subscriptionService.isTrialActive(userId);
 
-    // Ограничение на 1 чат для FREE-пользователей
-    if (subscriptionStatus === "FREE") {
+    // Ограничение на 1 чат для FREE-пользователей после окончания триала
+    if (subscriptionStatus === "FREE" && !trialActive) {
       const trackedChatId = await this.subscriptionService.getTrackedChatId(
         userId
       );
@@ -39,6 +42,32 @@ export class BusinessMessageHandler {
       if (trackedChatId && trackedChatId !== message.chat.id) {
         this.logger.info(
           `Пользователь ${userId} (FREE) пытается отслеживать новый чат. Отклонено.`
+        );
+        // Покажем владельцу варианты: оформить подписку, пригласить реферала, выбрать этот чат
+        await ctx.telegram.sendMessage(
+          userId,
+          i18next.t("limits.choose_option"),
+          {
+            ...Markup.inlineKeyboard([
+              [
+                Markup.button.callback(
+                  i18next.t("limits.choose_this_chat"),
+                  `choose_chat_${message.chat.id}`
+                ),
+              ],
+              [
+                Markup.button.url(
+                  i18next.t("premium.buy_button"),
+                  process.env.TRIBUTE_PREMIUM_URL ||
+                    "https://t.me/tribute/app?startapp=sxl5"
+                ),
+                Markup.button.callback(
+                  i18next.t("referral.invite_friend"),
+                  `invite_referral`
+                ),
+              ],
+            ]),
+          }
         );
         return;
       }
@@ -90,6 +119,7 @@ export class BusinessMessageHandler {
     const cachedMessage: CachedMessage = {
       ...message,
       text: textForCache,
+      ...(message.caption && { caption: message.caption }),
       s3Key: s3Key,
     };
     await this.cacheService.cacheMessage(cachedMessage);

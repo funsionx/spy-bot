@@ -64,23 +64,27 @@ class TruthTellerBot {
       this.ownerId,
       this.cacheService,
       this.s3Service,
-      telegramService
+      telegramService,
+      this.subscriptionService
     );
     this.messageEditHandler = new MessageEditHandler(
       this.cacheService,
       this.ownerId,
-      telegramService
+      telegramService,
+      this.subscriptionService
     );
     this.messageDeleteHandler = new MessageDeleteHandler(
       this.cacheService,
       this.ownerId,
       telegramService,
-      this.s3Service
+      this.s3Service,
+      this.subscriptionService
     );
     this.businessMessageHandler = new BusinessMessageHandler(
       this.cacheService,
       this.s3Service,
-      this.subscriptionService
+      this.subscriptionService,
+      this.ownerId
     );
     this.businessConnectionHandler = new BusinessConnectionHandler(
       this.ownerId

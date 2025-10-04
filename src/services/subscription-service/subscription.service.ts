@@ -34,6 +34,8 @@ export class SubscriptionService {
       userUuid: randomUUID(),
       telegramId,
       subscriptionStatus: "FREE",
+      // Старт триала на 14 дней
+      trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
     });
     return user;
   }
@@ -72,6 +74,20 @@ export class SubscriptionService {
     return user.subscriptionStatus;
   }
 
+  /** Возвращает true, если триал активен. */
+  public async isTrialActive(telegramId: number): Promise<boolean> {
+    const user = await this.findOrCreateUser(telegramId);
+    return !!(user.trialEndsAt && user.trialEndsAt.getTime() > Date.now());
+  }
+
+  /** Завершает триал немедленно. */
+  public async endTrial(telegramId: number): Promise<void> {
+    await UserModel.updateOne(
+      { telegramId },
+      { $set: { trialEndsAt: null } }
+    ).exec();
+  }
+
   /**
    * Устанавливает статус подписки для пользователя по Telegram ID.
    * Возвращает актуальную сущность пользователя после обновления.
@@ -88,6 +104,33 @@ export class SubscriptionService {
     this.logger.info(
       `Статус подписки для пользователя ${telegramId} установлен на ${status}. Срок действия: ${expiresAtISO}`
     );
+    return user;
+  }
+
+  /** Добавляет пользователю указанное количество недель (к активному периоду). */
+  public async grantWeeksToUser(user: IUser, weeks: number): Promise<IUser> {
+    const now = new Date();
+    // Определяем, что продлевать: подписку или триал
+    const currentEnd =
+      user.subscriptionEndsAt && user.subscriptionEndsAt > now
+        ? user.subscriptionEndsAt
+        : user.trialEndsAt && user.trialEndsAt > now
+        ? user.trialEndsAt
+        : now;
+    const days = weeks * 7;
+    const added = new Date(currentEnd.getTime() + days * 24 * 60 * 60 * 1000);
+    // Если активен триал — продлеваем триал; иначе продлеваем подписку
+    if (
+      user.trialEndsAt &&
+      user.trialEndsAt > now &&
+      currentEnd === user.trialEndsAt
+    ) {
+      user.trialEndsAt = added;
+    } else {
+      user.subscriptionStatus = "PREMIUM";
+      user.subscriptionEndsAt = added;
+    }
+    await user.save();
     return user;
   }
 
@@ -151,14 +194,28 @@ export class SubscriptionService {
         referrer: referrer._id,
         referred: referred._id,
       });
-      // Бонус 7 дней премиума: продлеваем при необходимости
-      const baseDate =
-        referrer.subscriptionEndsAt && referrer.subscriptionEndsAt > new Date()
+      // Бонус: +1 неделя к текущему периоду (триал или подписка)
+      const now = new Date();
+      const currentEnd =
+        referrer.subscriptionEndsAt && referrer.subscriptionEndsAt > now
           ? referrer.subscriptionEndsAt
-          : new Date();
-      const newEnds = new Date(baseDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-      referrer.subscriptionStatus = "PREMIUM";
-      referrer.subscriptionEndsAt = newEnds;
+          : referrer.trialEndsAt && referrer.trialEndsAt > now
+          ? referrer.trialEndsAt
+          : now;
+      const bonusEnds = new Date(
+        currentEnd.getTime() + 7 * 24 * 60 * 60 * 1000
+      );
+      // Если бонус накладывается на триал — продлеваем триал; иначе продлеваем подписку и включаем PREMIUM
+      if (
+        referrer.trialEndsAt &&
+        referrer.trialEndsAt > now &&
+        currentEnd === referrer.trialEndsAt
+      ) {
+        referrer.trialEndsAt = bonusEnds;
+      } else {
+        referrer.subscriptionStatus = "PREMIUM";
+        referrer.subscriptionEndsAt = bonusEnds;
+      }
       await referrer.save();
     }
 

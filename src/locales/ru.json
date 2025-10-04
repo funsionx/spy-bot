@@ -15,13 +15,22 @@
     "file_not_found": "❌ Не удалось получить файл.",
     "latest_media_not_found": "❌ Последний медиафайл не найден.",
     "get_media_error": "❌ Не удалось получить файл. Проверьте логи.",
+    "service_unavailable": "Сервис недоступен",
+    "invalid_chat": "Неверный чат",
     "business_connection_enabled": "✅ Business подключение активировано!",
     "business_connection_disabled": "❌ Business подключение отключено",
     "connection_id": "🔗 ID: {{id}}",
     "connection_user": "👤 Пользователь: {{userName}}",
     "connection_date": "📅 Дата: {{date}}",
     "connection_enabled_message": "Теперь бот будет отслеживать изменения в ваших чатах.",
-    "connection_disabled_message": "Бот больше не будет отслеживать изменения в чатах."
+    "connection_disabled_message": "Бот больше не будет отслеживать изменения в чатах.",
+    "edited_v2": "╭─────────────────────╮\n📝 *ИЗМЕНЕНО СООБЩЕНИЕ*{{mediaIndicator}}\n╰─────────────────────╯\n\n👤 *Кто:* {{userName}}{{usernameLine}}\n💬 *Чат:* \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ ⏮ ДО ═══╗\n{{oldTextFormatted}}\n\n╔═══ ⏭ ПОСЛЕ ═══╗\n{{newTextFormatted}}\n\n──────────────────────",
+    "media_info": "\n💾 Обнаружен контент, он прикреплён к этому сообщению.\\n",
+    "deleted_v2": "╭─────────────────────╮\n🗑️ *УДАЛЕНО СООБЩЕНИЕ*{{mediaIndicator}}\n╰─────────────────────╯\n\n👤 *Кто:* {{userName}}{{usernameLine}}\n💬 *Чат:* \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 ТЕКСТ ═══╗\n{{messageText}}\n\n──────────────────────",
+    "deleted_multiple_v2": "╭─────────────────────╮\n🗑️ *УДАЛЕНО {{count}} СООБЩЕНИЙ*{{mediaIndicator}}\n╰─────────────────────╯\n\n👤 *Кто:* {{userName}}{{usernameLine}}\n💬 *Чат:* \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 СООБЩЕНИЯ ═══╗{{messagesText}}\n\n──────────────────────",
+    "media_from_message": "📎 Медиа из сообщения #{{index}}",
+    "business_connection_enabled_v2": "{{title}}\n\n{{id}}\n{{user}}\n{{date}}\n\n{{message}}",
+    "business_connection_disabled_v2": "{{title}}\n\n{{id}}\n\n{{message}}"
   },
   "common": {
     "media_file": "[Медиафайл]",
@@ -41,9 +50,10 @@
     "get_latest_media": "🖼️ Получить последнее медиа",
     "help": "📖 Справка",
     "set_language": "🌐 Сменить язык",
-    "premium": "💎 Получить Premium"
+    "premium": "💎 Получить Premium",
+    "feedback": "💬 Оставить отзыв"
   },
-  "help_text": "📖 Справка TruthTellerBot\n\nФункции:\n• Отслеживание изменений и удалений сообщений\n• Сохранение удаленных медиафайлов\n• Уведомления в реальном времени\n\nНастройка:\n1. Telegram > Настройки > Business\n2. Боты для чатов > Добавить бота\n3. Выберите этого бота\n\nКоманды:\n/start — запуск и справка\n/get_latest_media — получить последний медиафайл\n/help — эта справка\n/set_language — сменить язык\n/premium — получить премиум-доступ\n\nВажно:\nБот не сохраняет сообщения. Все уведомления приходят только в этот чат.",
+  "help_text": "📖 *Справка TruthTellerBot*\n\n🔍 *Функции:*\n• Отслеживание изменений и удалений сообщений\n• Сохранение удаленных медиафайлов\n• Уведомления в реальном времени\n\n⚙️ *Настройка:*\n1\\. Telegram > Настройки > Business\n2\\. Боты для чатов > Добавить бота\n3\\. Выберите этого бота\n\n🎯 *Команды:*\n/start — запуск и справка\n/get\\_latest\\_media — получить последний медиафайл\n/help — эта справка\n/set\\_language — сменить язык\n/premium — получить премиум-доступ\n/referral — получить реферальную ссылку\n/feedback — оставить отзыв\n\n⚠️ *Важно:*\nБот не сохраняет сообщения\\. Все уведомления приходят только в этот чат\\.",
   "language": {
     "select": "Пожалуйста, выберите язык:",
     "changed": "✅ Язык успешно изменен на: {{lang}}"
@@ -51,5 +61,19 @@
   "premium": {
     "info": "Premium дает: неограниченные чаты, все типы контента, приоритетную поддержку.",
     "buy_button": "Купить Premium"
+  },
+  "limits": {
+    "choose_option": "Ваш пробный период завершен. Выберите действие:",
+    "choose_this_chat": "Выбрать этот чат",
+    "chat_selected": "Этот чат выбран для отслеживания",
+    "trial_active": "У вас активен пробный период. Ограничения по чатам пока не действуют."
+  },
+  "referral": {
+    "title": "🔗 *Ваша реферальная ссылка:*",
+    "button_open": "Открыть",
+    "invite_friend": "Пригласить друга"
+  },
+  "feedback": {
+    "prompt": "Напишите свой отзыв или сообщите об ошибке в личных сообщениях: @funsionx"
   }
 }

@@ -18,6 +18,7 @@ export interface BusinessMessage {
   chat: Chat;
   from?: User;
   text?: string;
+  caption?: string;
   business_connection_id: string;
   photo?: PhotoSize[];
   video?: Video;
@@ -118,6 +119,7 @@ export interface VideoNote {
 export interface CachedMessage {
   message_id: number;
   text?: string;
+  caption?: string;
   from?: User;
   chat: Chat;
   date: number;

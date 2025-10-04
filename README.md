@@ -102,16 +102,25 @@ docker-compose up -d --build
 
 ### 6. Подключение к MongoDB через MongoDB Compass
 
-- Локально (через docker-compose порт):
-  - Host: `localhost`
-  - Port: `27017` (или значение `MONGO_PORT`)
-  - Authentication: Username/Password
-  - Username: `spybot`
-  - Password: `spybot`
-  - Auth DB: `admin`
-  - Default DB: `spybot`
-- Готовая строка для Compass:
-  - `mongodb://spybot:spybot@localhost:27017/spybot?authSource=admin`
+🔒 **Подробная инструкция по безопасному подключению:** [MONGO_COMPASS_SETUP.md](./MONGO_COMPASS_SETUP.md)
+
+Краткая инструкция:
+
+1. Установите креды в `.env`:
+
+```env
+MONGO_INITDB_ROOT_USERNAME=spybot
+MONGO_INITDB_ROOT_PASSWORD=your_secure_password
+MONGO_PORT=27017
+```
+
+2. Подключитесь через Mongo Compass:
+
+```
+mongodb://spybot:your_secure_password@localhost:27017/?authSource=admin
+```
+
+⚠️ **ВАЖНО**: Измените пароль по умолчанию на безопасный!
 
 ## 📱 Команды бота
 
@@ -120,6 +129,8 @@ docker-compose up -d --build
 - `/help` — справка по использованию.
 - `/set_language` — сменить язык интерфейса.
 - `/premium` — информация о Premium и ссылка на оплату.
+- `/referral` — получить реферальную ссылку.
+- `/feedback` — оставить отзыв или предложение.
 
 ## 💎 Монетизация и подписки
 

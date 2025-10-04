@@ -8,6 +8,7 @@ export interface IUser extends Document {
   subscriptionStatus: SubscriptionStatus;
   subscriptionEndsAt?: Date | null;
   trackedChatId?: number | null;
+  trialEndsAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +24,7 @@ const UserSchema = new Schema<IUser>(
     },
     subscriptionEndsAt: { type: Date, default: null },
     trackedChatId: { type: Number, default: null },
+    trialEndsAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
