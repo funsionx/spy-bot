@@ -47,6 +47,9 @@ export class MessageDeleteHandler {
     const businessUserId = await this.cacheService.getValue(
       `business_connection:${deletedMessages.business_connection_id}:user_id`
     );
+    this.logger.info(
+      `[DELETE] Fetched businessUserId from cache: ${businessUserId}`
+    );
 
     const subscriptionStatus =
       await this.subscriptionService.getUserSubscriptionStatus(this.ownerId);
@@ -82,9 +85,15 @@ export class MessageDeleteHandler {
 
     if (foundMessages.length > 0) {
       // Фильтруем сообщения, отправленные владельцем бизнес-аккаунта
-      const interlocutorMessages = foundMessages.filter(
-        (msg) => msg.from?.id.toString() !== businessUserId
-      );
+      const interlocutorMessages = foundMessages.filter((msg) => {
+        const isOwner = msg.from?.id.toString() === businessUserId;
+        if (isOwner) {
+          this.logger.info(
+            `[DELETE] Filtering out message from owner. Message from ID: ${msg.from?.id}`
+          );
+        }
+        return !isOwner;
+      });
 
       if (interlocutorMessages.length > 0) {
         await this.sendDeleteNotifications(ctx, interlocutorMessages, chatName);
@@ -123,12 +132,6 @@ export class MessageDeleteHandler {
       const firstMessage = userMessages[0];
       if (!firstMessage) continue; // Проверка на существование
 
-      const userName = firstMessage.from
-        ? NotificationService.getUserDisplayName(firstMessage.from)
-        : i18next.t("common.unknown_user");
-      const userUsername = firstMessage.from?.username;
-      const usernameLine = userUsername ? `\n@${userUsername}` : "";
-
       if (userMessages.length === 1) {
         const message = userMessages[0];
         if (!message) continue;
@@ -138,12 +141,12 @@ export class MessageDeleteHandler {
         const messageText =
           message.text || i18next.t("common.message_without_text");
 
-        const mediaInfo = hasMedia ? i18next.t("notifications.media_info") : "";
+        const mediaInfo = hasMedia
+          ? i18next.t("notifications.media_info")
+          : "";
 
         const notification = i18next.t("notifications.deleted_v2", {
           mediaIndicator,
-          userName,
-          usernameLine,
           chatName,
           mediaInfo,
           messageText,
@@ -207,8 +210,6 @@ export class MessageDeleteHandler {
         const notification = i18next.t("notifications.deleted_multiple_v2", {
           count: userMessages.length,
           mediaIndicator,
-          userName,
-          usernameLine,
           chatName,
           mediaInfo,
           messagesText,

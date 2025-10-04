@@ -24,10 +24,10 @@
     "connection_date": "📅 Дата: {{date}}",
     "connection_enabled_message": "Теперь бот будет отслеживать изменения в ваших чатах.",
     "connection_disabled_message": "Бот больше не будет отслеживать изменения в чатах.",
-    "edited_v2": "╭─────────────────────╮\n📝 *ИЗМЕНЕНО СООБЩЕНИЕ*{{mediaIndicator}}\n╰─────────────────────╯\n\n👤 *Кто:* {{userName}}{{usernameLine}}\n💬 *Чат:* \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ ⏮ ДО ═══╗\n{{oldTextFormatted}}\n\n╔═══ ⏭ ПОСЛЕ ═══╗\n{{newTextFormatted}}\n\n──────────────────────",
+    "edited_v2": "╭─────────────────────╮\n📝 *ИЗМЕНЕНО СООБЩЕНИЕ*{{mediaIndicator}}\n╰─────────────────────╯\n\n💬 Чат с \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ ⏮️ ДО ═══╗\n{{oldTextFormatted}}\n\n╔═══ ⏭️ ПОСЛЕ ═══╗\n{{newTextFormatted}}\n\n──────────────────────",
     "media_info": "\n💾 Обнаружен контент, он прикреплён к этому сообщению.\\n",
-    "deleted_v2": "╭─────────────────────╮\n🗑️ *УДАЛЕНО СООБЩЕНИЕ*{{mediaIndicator}}\n╰─────────────────────╯\n\n👤 *Кто:* {{userName}}{{usernameLine}}\n💬 *Чат:* \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 ТЕКСТ ═══╗\n{{messageText}}\n\n──────────────────────",
-    "deleted_multiple_v2": "╭─────────────────────╮\n🗑️ *УДАЛЕНО {{count}} СООБЩЕНИЙ*{{mediaIndicator}}\n╰─────────────────────╯\n\n👤 *Кто:* {{userName}}{{usernameLine}}\n💬 *Чат:* \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 СООБЩЕНИЯ ═══╗{{messagesText}}\n\n──────────────────────",
+    "deleted_v2": "╭─────────────────────╮\n🗑️ *УДАЛЕНО СООБЩЕНИЕ*{{mediaIndicator}}\n╰─────────────────────╯\n\n💬 Чат с \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 ТЕКСТ ═══╗\n{{messageText}}\n\n──────────────────────",
+    "deleted_multiple_v2": "╭─────────────────────╮\n🗑️ *УДАЛЕНО {{count}} СООБЩЕНИЙ*{{mediaIndicator}}\n╰─────────────────────╯\n\n💬 Чат с \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 СООБЩЕНИЯ ═══╗{{messagesText}}\n\n──────────────────────",
     "media_from_message": "📎 Медиа из сообщения #{{index}}",
     "business_connection_enabled_v2": "{{title}}\n\n{{id}}\n{{user}}\n{{date}}\n\n{{message}}",
     "business_connection_disabled_v2": "{{title}}\n\n{{id}}\n\n{{message}}"

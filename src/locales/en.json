@@ -24,10 +24,10 @@
     "connection_date": "📅 Date: {{date}}",
     "connection_enabled_message": "Now the bot will track changes in your chats",
     "connection_disabled_message": "The bot will no longer track changes in chats",
-    "edited_v2": "╭─────────────────────╮\n📝 *MESSAGE EDITED*{{mediaIndicator}}\n╰─────────────────────╯\n\n👤 *Who:* {{userName}}{{usernameLine}}\n💬 *Chat:* \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ ⏮ BEFORE ═══╗\n{{oldTextFormatted}}\n\n╔═══ ⏭ AFTER ═══╗\n{{newTextFormatted}}\n\n──────────────────────",
+    "edited_v2": "╭─────────────────────╮\n📝 *MESSAGE EDITED*{{mediaIndicator}}\n╰─────────────────────╯\n\n💬 Chat with \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ ⏮️ BEFORE ═══╗\n{{oldTextFormatted}}\n\n╔═══ ⏭️ AFTER ═══╗\n{{newTextFormatted}}\n\n──────────────────────",
     "media_info": "\n💾 Content detected, it is attached to this message.\n",
-    "deleted_v2": "╭─────────────────────╮\n🗑️ *MESSAGE DELETED*{{mediaIndicator}}\n╰─────────────────────╯\n\n👤 *Who:* {{userName}}{{usernameLine}}\n💬 *Chat:* \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 TEXT ═══╗\n{{messageText}}\n\n──────────────────────",
-    "deleted_multiple_v2": "╭─────────────────────╮\n🗑️ *{{count}} MESSAGES DELETED*{{mediaIndicator}}\n╰─────────────────────╯\n\n👤 *Who:* {{userName}}{{usernameLine}}\n💬 *Chat:* \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 MESSAGES ═══╗{{messagesText}}\n\n──────────────────────",
+    "deleted_v2": "╭─────────────────────╮\n🗑️ *MESSAGE DELETED*{{mediaIndicator}}\n╰─────────────────────╯\n\n💬 Chat with \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 TEXT ═══╗\n{{messageText}}\n\n──────────────────────",
+    "deleted_multiple_v2": "╭─────────────────────╮\n🗑️ *{{count}} MESSAGES DELETED*{{mediaIndicator}}\n╰─────────────────────╯\n\n💬 Chat with \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 MESSAGES ═══╗{{messagesText}}\n\n──────────────────────",
     "media_from_message": "📎 Media from message #{{index}}",
     "business_connection_enabled_v2": "{{title}}\n\n{{id}}\n{{user}}\n{{date}}\n\n{{message}}",
     "business_connection_disabled_v2": "{{title}}\n\n{{id}}\n\n{{message}}"

@@ -56,6 +56,8 @@ export class MessageEditHandler {
       `business_connection:${editedMessage.business_connection_id}:user_id`
     );
 
+    this.logger.info(`[EDIT] Message from user ID: ${editedMessage.from?.id}`);
+
     if (
       businessUserId &&
       editedMessage.from?.id.toString() === businessUserId
@@ -121,12 +123,7 @@ export class MessageEditHandler {
       );
     }
 
-    const userName = editedMessage.from
-      ? NotificationService.getUserDisplayName(editedMessage.from)
-      : i18next.t("common.unknown_user");
     const chatName = NotificationService.getChatDisplayName(editedMessage.chat);
-    const userUsername = editedMessage.from?.username;
-    const usernameLine = userUsername ? `\n@${userUsername}` : "";
 
     const hasMedia = !!originalMessage.s3Key;
     const mediaIndicator = hasMedia ? " 📎" : "";
@@ -140,8 +137,6 @@ export class MessageEditHandler {
 
     const notification = i18next.t("notifications.edited_v2", {
       mediaIndicator,
-      userName,
-      usernameLine,
       chatName,
       mediaInfo,
       oldTextFormatted,
