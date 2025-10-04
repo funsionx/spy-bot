@@ -1,4 +1,5 @@
 import i18next from "../../i18n";
+import type { Chat } from "../../types/telegram";
 
 /**
  * Сервис для форматирования уведомлений о изменениях и удалениях сообщений
@@ -64,6 +65,21 @@ export class NotificationService {
   public static escapeForCode(text: string): string {
     if (!text) return "";
     return text.replace(/`/g, "\\`").replace(/\\/g, "\\\\");
+  }
+
+  /**
+   * Возвращает безопасное MarkdownV2 представление чата:
+   * - @username с кликабельной ссылкой, если доступен
+   * - иначе экранированное название чата
+   */
+  static getChatDisplayMarkdown(chat: Chat): string {
+    if (chat.username) {
+      const uname = chat.username;
+      // @username как кликабельная ссылка
+      return `[@${uname}](https://t.me/${uname})`;
+    }
+    const name = this.getChatDisplayName(chat);
+    return this.escapeMarkdown(name);
   }
 
   /**

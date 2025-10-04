@@ -2,12 +2,13 @@ import { Context } from "telegraf";
 import { NotificationService } from "../services/notification-service/notification.service";
 import { Logger } from "../services/logger-service/logger.service";
 import i18next from "../i18n";
-import { ICacheService } from "../services/cache-service/cache.service.interface";
+import { SubscriptionService } from "../services/subscription-service/subscription.service";
+import { UserModel } from "../models/user.model";
 
 export class BusinessConnectionHandler {
   private logger = Logger.getInstance();
 
-  constructor(private ownerId: number, private cacheService: ICacheService) {}
+  constructor(private subscriptionService: SubscriptionService) {}
 
   public async handle(ctx: Context) {
     const update = ctx.update as any;
@@ -15,18 +16,24 @@ export class BusinessConnectionHandler {
 
     try {
       const connection = update.business_connection;
+      const telegramId = connection.user?.id;
+
+      if (!telegramId) {
+        this.logger.warn("Business connection event without user_id received.");
+        return;
+      }
+
       this.logger.info(
-        `Business connection ${
-          connection.is_enabled ? "подключен" : "отключен"
-        }: ${connection.id}`
+        `Business connection event for user ${telegramId}. Enabled: ${connection.is_enabled}. Connection ID: ${connection.id}`
       );
 
       if (connection.is_enabled) {
-        await this.cacheService.setValue(
-          `business_connection:${connection.id}:user_id`,
-          connection.user.id.toString(),
-          -1
+        // Обновляем businessConnectionId для пользователя через сервис
+        await this.subscriptionService.updateUserBusinessConnectionId(
+          telegramId,
+          connection.id
         );
+
         const userName = NotificationService.escapeMarkdown(
           connection.user.first_name
         );
@@ -46,13 +53,16 @@ export class BusinessConnectionHandler {
           }
         );
 
-        await ctx.telegram.sendMessage(this.ownerId, notification, {
+        await ctx.telegram.sendMessage(telegramId, notification, {
           parse_mode: "MarkdownV2",
         });
       } else {
-        await this.cacheService.deleteValue(
-          `business_connection:${connection.id}:user_id`
+        // Удаляем businessConnectionId у пользователя через сервис
+        await this.subscriptionService.updateUserBusinessConnectionId(
+          telegramId,
+          null
         );
+
         const connectionId = NotificationService.escapeMarkdown(connection.id);
 
         const notification = i18next.t(
@@ -64,7 +74,7 @@ export class BusinessConnectionHandler {
           }
         );
 
-        await ctx.telegram.sendMessage(this.ownerId, notification, {
+        await ctx.telegram.sendMessage(telegramId, notification, {
           parse_mode: "MarkdownV2",
         });
       }

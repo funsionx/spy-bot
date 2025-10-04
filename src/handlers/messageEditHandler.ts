@@ -6,7 +6,7 @@ import { Logger } from "../services/logger-service/logger.service.js";
 import i18next from "../i18n.js";
 import { TelegramService } from "../services/telegram-service/telegram.service.js";
 import { SubscriptionService } from "../services/subscription-service/subscription.service.js";
-import { Markup } from "telegraf";
+import { UserModel } from "../models/user.model.js";
 
 /**
  * Обработчик изменений сообщений через Telegram Business API
@@ -15,7 +15,6 @@ export class MessageEditHandler {
   private logger = Logger.getInstance();
   constructor(
     private cacheService: ICacheService,
-    private ownerId: number,
     private telegramService: TelegramService,
     private subscriptionService: SubscriptionService
   ) {}
@@ -48,35 +47,55 @@ export class MessageEditHandler {
     ctx: Context,
     editedMessage: BusinessMessage
   ): Promise<void> {
-    this.logger.info(
-      `Обнаружено изменение сообщения ID: ${editedMessage.message_id}`
-    );
+    let user = await UserModel.findOne({
+      businessConnectionId: editedMessage.business_connection_id,
+    });
 
-    const businessUserId = await this.cacheService.getValue(
-      `business_connection:${editedMessage.business_connection_id}:user_id`
-    );
+    if (!user || !user.telegramId) {
+      try {
+        const conn: any = await (ctx.telegram as any).callApi(
+          "getBusinessConnection",
+          { business_connection_id: editedMessage.business_connection_id }
+        );
+        if (conn?.user?.id && conn?.id) {
+          await this.subscriptionService.updateUserBusinessConnectionId(
+            conn.user.id,
+            conn.id
+          );
+          user = await UserModel.findOne({
+            businessConnectionId: editedMessage.business_connection_id,
+          });
+        }
+      } catch (e) {
+        this.logger.warn(
+          `Не удалось получить/сохранить business_connection (${editedMessage.business_connection_id}):`,
+          e as any
+        );
+      }
 
-    this.logger.info(`[EDIT] Message from user ID: ${editedMessage.from?.id}`);
+      if (!user || !user.telegramId) {
+        this.logger.warn(
+          `User not found for business_connection_id: ${editedMessage.business_connection_id}`
+        );
+        return;
+      }
+    }
+    const userId = Number(user.telegramId);
 
-    if (
-      businessUserId &&
-      editedMessage.from?.id.toString() === businessUserId
-    ) {
+    if (editedMessage.from?.id === userId) {
       this.logger.info(
-        `Пропуск изменения сообщения от владельца бизнес-аккаунта: ${editedMessage.from?.id}`
+        `[EDIT] Skipping notification because message sender (${editedMessage.from?.id}) is the bot owner (${userId}).`
       );
       return;
     }
 
     const subscriptionStatus =
-      await this.subscriptionService.getUserSubscriptionStatus(this.ownerId);
-    const trialActive = await this.subscriptionService.isTrialActive(
-      this.ownerId
-    );
+      await this.subscriptionService.getUserSubscriptionStatus(userId);
+    const trialActive = await this.subscriptionService.isTrialActive(userId);
 
     if (subscriptionStatus === "FREE" && !trialActive) {
       const trackedChatId = await this.subscriptionService.getTrackedChatId(
-        this.ownerId
+        userId
       );
       if (trackedChatId && trackedChatId !== editedMessage.chat.id) {
         return;
@@ -117,40 +136,39 @@ export class MessageEditHandler {
 
     if (originalMessage.s3Key) {
       this.cacheService.setValue(
-        `${this.ownerId}:latest_media_key`,
+        `${userId}:latest_media_key`,
         originalMessage.s3Key,
         120
       );
     }
 
     const chatName = NotificationService.getChatDisplayName(editedMessage.chat);
-
     const hasMedia = !!originalMessage.s3Key;
     const mediaIndicator = hasMedia ? " 📎" : "";
 
-    const oldTextFormatted =
+    const oldTextFormattedRaw =
       oldText || i18next.t("common.message_without_text");
-    const newTextFormatted =
+    const newTextFormattedRaw =
       newText || i18next.t("common.message_without_text");
-
-    const mediaInfo = hasMedia ? i18next.t("notifications.media_info") : "";
 
     const notification = i18next.t("notifications.edited_v2", {
       mediaIndicator,
-      chatName,
-      mediaInfo,
-      oldTextFormatted,
-      newTextFormatted,
+      chatName: NotificationService.escapeMarkdown(chatName),
+      mediaInfo: NotificationService.escapeMarkdown(
+        hasMedia ? i18next.t("notifications.media_info") : ""
+      ),
+      oldTextFormatted: NotificationService.escapeMarkdown(oldTextFormattedRaw),
+      newTextFormatted: NotificationService.escapeMarkdown(newTextFormattedRaw),
     });
 
-    const sent = await ctx.telegram.sendMessage(this.ownerId, notification, {
+    const sent = await ctx.telegram.sendMessage(userId, notification, {
       link_preview_options: { is_disabled: true },
       parse_mode: "MarkdownV2",
     });
 
     if (hasMedia) {
       await this.telegramService.sendContentMessage(
-        this.ownerId,
+        userId,
         "",
         originalMessage.s3Key,
         sent.message_id

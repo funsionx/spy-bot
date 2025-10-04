@@ -10,7 +10,6 @@ export class CommandHandler {
   private logger = Logger.getInstance();
 
   constructor(
-    private ownerId: number,
     private cacheService: ICacheService,
     private s3Service: S3Service | undefined,
     private telegramService: TelegramService,
@@ -35,6 +34,23 @@ export class CommandHandler {
   private async handleStart(ctx: Context) {
     const userId = ctx.from?.id;
     if (!userId) return;
+
+    // Обработка deep-link: /start ref_<uuid>
+    if (ctx.message && "text" in ctx.message) {
+      const text: string = ctx.message.text;
+      const parts = text.split(" ");
+      const payload = parts[1] || "";
+      if (payload.startsWith("ref_")) {
+        try {
+          const refUuid = payload.substring(4);
+          if (this.subscriptionService) {
+            await this.subscriptionService.addReferralAndGrant(refUuid, userId);
+          }
+        } catch (e) {
+          this.logger.warn(`Ошибка обработки реферального кода: ${payload}`, e);
+        }
+      }
+    }
 
     // Создаем/обновляем пользователя в базе
     try {
@@ -165,8 +181,8 @@ export class CommandHandler {
 
   private async sendHelpMessage(ctx: any): Promise<void> {
     const help = i18next.t("help_text");
-    // Отправляем как простой текст без MarkdownV2, чтобы избежать ошибок экранирования
-    await ctx.reply(help, { parse_mode: "MarkdownV2" });
+    // Отправляем как простой текст без Markdown, чтобы избежать ошибок экранирования
+    await ctx.reply(help);
   }
 
   private async handleReferral(ctx: Context) {

@@ -29,7 +29,6 @@ class TruthTellerBot {
   private cacheService: ICacheService;
   private s3Service: S3Service | undefined;
   private logger = Logger.getInstance();
-  private ownerId: number;
 
   // Services
   private subscriptionService: SubscriptionService;
@@ -48,7 +47,6 @@ class TruthTellerBot {
     this.validateEnvironmentVariables();
 
     const botToken = process.env.BOT_TOKEN!;
-    this.ownerId = parseInt(process.env.OWNER_ID!, 10);
     this.bot = new Telegraf(botToken);
     this.cacheService = cacheService;
 
@@ -68,7 +66,6 @@ class TruthTellerBot {
       this.bot
     );
     this.commandHandler = new CommandHandler(
-      this.ownerId,
       this.cacheService,
       this.s3Service,
       telegramService,
@@ -76,36 +73,29 @@ class TruthTellerBot {
     );
     this.messageEditHandler = new MessageEditHandler(
       this.cacheService,
-      this.ownerId,
       telegramService,
       this.subscriptionService
     );
     this.messageDeleteHandler = new MessageDeleteHandler(
       this.cacheService,
-      this.ownerId,
       telegramService,
-      this.s3Service,
       this.subscriptionService
     );
     this.businessMessageHandler = new BusinessMessageHandler(
       this.cacheService,
       this.s3Service,
-      this.subscriptionService,
-      this.ownerId
+      this.subscriptionService
     );
     this.businessConnectionHandler = new BusinessConnectionHandler(
-      this.ownerId,
-      this.cacheService
+      this.subscriptionService
     );
 
     this.logger.info("TruthTellerBot инициализирован");
-    this.logger.info(`Владелец: ${this.ownerId}`);
   }
 
   private validateEnvironmentVariables(): void {
     const requiredVars = [
       "BOT_TOKEN",
-      "OWNER_ID",
       "WEBHOOK_URL",
       "TRIBUTE_API_KEY",
       "MONGODB_URI",
@@ -114,10 +104,6 @@ class TruthTellerBot {
       if (!process.env[varName]) {
         throw new Error(`❌ Переменная окружения ${varName} не установлена`);
       }
-    }
-    const ownerId = parseInt(process.env.OWNER_ID!, 10);
-    if (isNaN(ownerId)) {
-      throw new Error("❌ OWNER_ID должен быть числом");
     }
   }
 
@@ -134,43 +120,22 @@ class TruthTellerBot {
       const userId = ctx.from?.id;
       if (userId) {
         // Устанавливаем язык для каждого запроса от пользователя
-        if (userId === this.ownerId) {
-          const userLang = await this.cacheService.getValue(
-            `user:${userId}:lang`
-          );
-          if (userLang && userLang !== i18next.language) {
-            await i18next.changeLanguage(userLang);
-          }
+        const userLang = await this.cacheService.getValue(
+          `user:${userId}:lang`
+        );
+        if (userLang && userLang !== i18next.language) {
+          await i18next.changeLanguage(userLang);
         }
       }
 
-      if (update.business_message) {
+      if (update.business_connection) {
+        await this.businessConnectionHandler.handle(ctx);
+      } else if (update.business_message) {
         await this.businessMessageHandler.handle(ctx);
       } else if (update.edited_business_message) {
         await this.messageEditHandler.handleEditedBusinessMessage(ctx);
       } else if (update.deleted_business_messages) {
         await this.messageDeleteHandler.handleDeletedBusinessMessages(ctx);
-      } else if (update.business_connection) {
-        await this.businessConnectionHandler.handle(ctx);
-      } else if (
-        update.message &&
-        update.message.text &&
-        update.message.text.startsWith("/start")
-      ) {
-        // Обработка deep-link: /start ref_<uuid>
-        try {
-          const text: string = update.message.text as string;
-          const parts = text.split(" ");
-          const payload = parts[1] || "";
-          if (payload.startsWith("ref_")) {
-            const refUuid = payload.substring(4);
-            await this.subscriptionService.addReferralAndGrant(
-              refUuid,
-              update.message.from.id
-            );
-          }
-        } catch {}
-        return next();
       } else {
         return next();
       }

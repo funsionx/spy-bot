@@ -2,11 +2,11 @@ import type { Context } from "telegraf";
 import type { DeletedBusinessMessages, CachedMessage } from "../types/telegram";
 import type { ICacheService } from "../services/cache-service/cache.service.interface";
 import { NotificationService } from "../services/notification-service/notification.service";
-import type { S3Service } from "../services/s3-service/s3.service";
 import { Logger } from "../services/logger-service/logger.service";
 import i18next from "../i18n";
 import { TelegramService } from "../services/telegram-service/telegram.service";
 import { SubscriptionService } from "../services/subscription-service/subscription.service";
+import { UserModel } from "../models/user.model";
 
 /**
  * Обработчик удаления сообщений через Telegram Business API
@@ -16,9 +16,7 @@ export class MessageDeleteHandler {
 
   constructor(
     private cacheService: ICacheService,
-    private ownerId: number,
     private telegramService: TelegramService,
-    private s3Service: S3Service | undefined,
     private subscriptionService: SubscriptionService
   ) {}
 
@@ -44,30 +42,56 @@ export class MessageDeleteHandler {
     ctx: Context,
     deletedMessages: DeletedBusinessMessages
   ): Promise<void> {
-    const businessUserId = await this.cacheService.getValue(
-      `business_connection:${deletedMessages.business_connection_id}:user_id`
-    );
-    this.logger.info(
-      `[DELETE] Fetched businessUserId from cache: ${businessUserId}`
-    );
+    let user = await UserModel.findOne({
+      businessConnectionId: deletedMessages.business_connection_id,
+    });
+
+    if (!user || !user.telegramId) {
+      try {
+        const conn: any = await (ctx.telegram as any).callApi(
+          "getBusinessConnection",
+          { business_connection_id: deletedMessages.business_connection_id }
+        );
+        if (conn?.user?.id && conn?.id) {
+          await this.subscriptionService.updateUserBusinessConnectionId(
+            conn.user.id,
+            conn.id
+          );
+          user = await UserModel.findOne({
+            businessConnectionId: deletedMessages.business_connection_id,
+          });
+        }
+      } catch (e) {
+        this.logger.warn(
+          `Не удалось получить/сохранить business_connection (${deletedMessages.business_connection_id}):`,
+          e as any
+        );
+      }
+
+      if (!user || !user.telegramId) {
+        this.logger.warn(
+          `User not found for business_connection_id: ${deletedMessages.business_connection_id}`
+        );
+        return;
+      }
+    }
+    const userId = Number(user.telegramId);
 
     const subscriptionStatus =
-      await this.subscriptionService.getUserSubscriptionStatus(this.ownerId);
-    const trialActive = await this.subscriptionService.isTrialActive(
-      this.ownerId
-    );
+      await this.subscriptionService.getUserSubscriptionStatus(userId);
+    const trialActive = await this.subscriptionService.isTrialActive(userId);
 
     if (subscriptionStatus === "FREE" && !trialActive) {
       const trackedChatId = await this.subscriptionService.getTrackedChatId(
-        this.ownerId
+        userId
       );
       if (trackedChatId && trackedChatId !== deletedMessages.chat.id) {
         return;
       }
     }
 
-    const chatName = NotificationService.getChatDisplayName(
-      deletedMessages.chat
+    const chatNameMd = NotificationService.getChatDisplayMarkdown(
+      deletedMessages.chat as any
     );
     const cachedMessages = await this.cacheService.getCachedMessages(
       deletedMessages.business_connection_id,
@@ -76,27 +100,25 @@ export class MessageDeleteHandler {
     );
 
     const foundMessages: CachedMessage[] = [];
-    const missedMessageIds: number[] = [];
 
     for (const messageId of deletedMessages.message_ids) {
       const cached = cachedMessages.find((msg) => msg.message_id === messageId);
-      cached ? foundMessages.push(cached) : missedMessageIds.push(messageId);
+      if (cached) foundMessages.push(cached);
     }
 
     if (foundMessages.length > 0) {
       // Фильтруем сообщения, отправленные владельцем бизнес-аккаунта
-      const interlocutorMessages = foundMessages.filter((msg) => {
-        const isOwner = msg.from?.id.toString() === businessUserId;
-        if (isOwner) {
-          this.logger.info(
-            `[DELETE] Filtering out message from owner. Message from ID: ${msg.from?.id}`
-          );
-        }
-        return !isOwner;
-      });
+      const interlocutorMessages = foundMessages.filter(
+        (msg) => msg.from?.id !== userId
+      );
 
       if (interlocutorMessages.length > 0) {
-        await this.sendDeleteNotifications(ctx, interlocutorMessages, chatName);
+        await this.sendDeleteNotifications(
+          ctx,
+          interlocutorMessages,
+          chatNameMd,
+          userId
+        );
       }
     }
 
@@ -115,22 +137,21 @@ export class MessageDeleteHandler {
   private async sendDeleteNotifications(
     ctx: Context,
     deletedMessages: CachedMessage[],
-    chatName: string
+    chatNameMd: string,
+    ownerId: number
   ): Promise<void> {
     const messagesByUser = new Map<string, CachedMessage[]>();
     for (const message of deletedMessages) {
-      const userId = message.from?.id.toString() || "unknown";
-      if (!messagesByUser.has(userId)) {
-        messagesByUser.set(userId, []);
+      const senderKey = message.from?.id?.toString() || "unknown";
+      if (!messagesByUser.has(senderKey)) {
+        messagesByUser.set(senderKey, []);
       }
-      messagesByUser.get(userId)!.push(message);
+      messagesByUser.get(senderKey)!.push(message);
     }
 
     for (const userMessages of messagesByUser.values()) {
       if (userMessages.length === 0) continue;
-
-      const firstMessage = userMessages[0];
-      if (!firstMessage) continue; // Проверка на существование
+      if (!userMessages[0]) continue; // пустая группа на всякий случай
 
       if (userMessages.length === 1) {
         const message = userMessages[0];
@@ -140,38 +161,51 @@ export class MessageDeleteHandler {
         const mediaIndicator = hasMedia ? " 📎" : "";
         const messageText =
           message.text || i18next.t("common.message_without_text");
+        const hasText =
+          !!message.text &&
+          message.text !== i18next.t("common.message_without_text");
 
-        const mediaInfo = hasMedia
-          ? i18next.t("notifications.media_info")
-          : "";
+        const chatNameEsc = chatNameMd;
 
-        const notification = i18next.t("notifications.deleted_v2", {
-          mediaIndicator,
-          chatName,
-          mediaInfo,
-          messageText,
-        });
+        const mediaInfo = hasMedia ? i18next.t("notifications.media_info") : "";
+
+        let notification: string;
+        if (hasMedia && !hasText) {
+          // Медиа без текста — убираем блок ТЕКСТ
+          notification = i18next.t("notifications.deleted_media_only_v2", {
+            mediaIndicator,
+            chatName: chatNameEsc,
+            mediaInfo: NotificationService.escapeMarkdown(mediaInfo),
+          });
+        } else {
+          // Есть текст — заворачиваем в код-блок
+          const messageTextCode = `\`\`\`${NotificationService.escapeForCode(
+            messageText
+          )}\`\`\``;
+          notification = i18next.t("notifications.deleted_v2", {
+            mediaIndicator,
+            chatName: chatNameEsc,
+            mediaInfo: NotificationService.escapeMarkdown(mediaInfo),
+            messageText: messageTextCode,
+          });
+        }
 
         if (message.s3Key) {
           this.cacheService.setValue(
-            `${this.ownerId}:latest_media_key`,
+            `${ownerId}:latest_media_key`,
             message.s3Key,
             120
           );
         }
 
-        const sent = await ctx.telegram.sendMessage(
-          this.ownerId,
-          notification,
-          {
-            link_preview_options: { is_disabled: true },
-            parse_mode: "MarkdownV2",
-          }
-        );
+        const sent = await ctx.telegram.sendMessage(ownerId, notification, {
+          link_preview_options: { is_disabled: true },
+          parse_mode: "MarkdownV2",
+        });
 
         if (hasMedia) {
           await this.telegramService.sendContentMessage(
-            this.ownerId,
+            ownerId,
             "",
             message.s3Key,
             sent.message_id
@@ -191,11 +225,21 @@ export class MessageDeleteHandler {
           const messageText =
             message.text || i18next.t("common.message_without_text");
           const msgHasMedia = message.s3Key ? " 📎" : "";
-          messagesText += `\n\n*${i + 1}.* ${messageText}${msgHasMedia}`;
+          // Используем (i + 1) вместо `${i + 1}.` чтобы избежать проблем с MarkdownV2
+          const hasText =
+            !!message.text &&
+            message.text !== i18next.t("common.message_without_text");
+          messagesText += `\n\n*(${i + 1})*${msgHasMedia}`;
+          if (hasText) {
+            const code = `\n\n\`\`\`${NotificationService.escapeForCode(
+              messageText
+            )}\`\`\``;
+            messagesText += code;
+          }
 
           if (message.s3Key) {
             this.cacheService.setValue(
-              `${this.ownerId}:latest_media_key`,
+              `${ownerId}:latest_media_key`,
               message.s3Key,
               120
             );
@@ -210,23 +254,19 @@ export class MessageDeleteHandler {
         const notification = i18next.t("notifications.deleted_multiple_v2", {
           count: userMessages.length,
           mediaIndicator,
-          chatName,
-          mediaInfo,
+          chatName: chatNameMd,
+          mediaInfo: NotificationService.escapeMarkdown(mediaInfo),
           messagesText,
         });
 
-        const sent = await ctx.telegram.sendMessage(
-          this.ownerId,
-          notification,
-          {
-            link_preview_options: { is_disabled: true },
-            parse_mode: "MarkdownV2",
-          }
-        );
+        const sent = await ctx.telegram.sendMessage(ownerId, notification, {
+          link_preview_options: { is_disabled: true },
+          parse_mode: "MarkdownV2",
+        });
 
         for (const mediaMsg of mediaMessages) {
           await this.telegramService.sendContentMessage(
-            this.ownerId,
+            ownerId,
             i18next.t("notifications.media_from_message", {
               index: mediaMsg.index,
             }),

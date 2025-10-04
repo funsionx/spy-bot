@@ -4,11 +4,9 @@ import { BusinessMessage, CachedMessage } from "../types/telegram";
 import { ICacheService } from "../services/cache-service/cache.service.interface";
 import { S3Service } from "../services/s3-service/s3.service";
 import { Logger } from "../services/logger-service/logger.service";
-import {
-  SubscriptionService,
-  SubscriptionStatus,
-} from "../services/subscription-service/subscription.service";
+import { SubscriptionService } from "../services/subscription-service/subscription.service";
 import i18next from "../i18n";
+import { IUser, UserModel } from "../models/user.model";
 
 export class BusinessMessageHandler {
   private logger = Logger.getInstance();
@@ -16,8 +14,7 @@ export class BusinessMessageHandler {
   constructor(
     private cacheService: ICacheService,
     private s3Service: S3Service | undefined,
-    private subscriptionService: SubscriptionService,
-    private ownerId: number
+    private subscriptionService: SubscriptionService
   ) {}
 
   public async handle(ctx: Context) {
@@ -27,8 +24,51 @@ export class BusinessMessageHandler {
       return;
     }
 
-    // Управление подпиской и лимитами ведём для владельца бота
-    const userId = this.ownerId;
+    let user: IUser | null = await UserModel.findOne({
+      businessConnectionId: message.business_connection_id,
+    });
+
+    if (!user || !user.telegramId) {
+      // Пытаемся самовосстановиться без ownerId: получаем связь через Bot API и линкуем её к владельцу (user.id) бизнес-аккаунта
+      try {
+        const conn: any = await (ctx.telegram as any).callApi(
+          "getBusinessConnection",
+          { business_connection_id: message.business_connection_id }
+        );
+        if (conn?.user?.id && conn?.id) {
+          await this.subscriptionService.updateUserBusinessConnectionId(
+            conn.user.id,
+            conn.id
+          );
+          user = await UserModel.findOne({
+            businessConnectionId: message.business_connection_id,
+          });
+        }
+      } catch (e) {
+        this.logger.warn(
+          `Не удалось получить/сохранить business_connection (${message.business_connection_id}):`,
+          e as any
+        );
+      }
+
+      if (!user || !user.telegramId) {
+        this.logger.warn(
+          `User not found for business_connection_id: ${message.business_connection_id}. Caching message but skipping logic.`
+        );
+        await this.cacheOriginalMessage(message);
+        return;
+      }
+    }
+
+    const userId = Number(user.telegramId);
+
+    // Если это сообщение от владельца, просто кэшируем его и выходим.
+    // Вся остальная логика (лимиты и т.д.) применяется только к собеседникам.
+    if (message.from.id === userId) {
+      await this.cacheOriginalMessage(message);
+      return;
+    }
+
     const subscriptionStatus =
       await this.subscriptionService.getUserSubscriptionStatus(userId);
     const trialActive = await this.subscriptionService.isTrialActive(userId);
@@ -82,10 +122,12 @@ export class BusinessMessageHandler {
         );
       }
     }
+    await this.cacheOriginalMessage(message);
+  }
 
+  private async cacheOriginalMessage(message: BusinessMessage) {
     let textForCache: string;
     let s3Key: string | null = null;
-
     if (this.isMediaMessage(message)) {
       if (!this.s3Service) {
         this.logger.warn(
@@ -131,7 +173,8 @@ export class BusinessMessageHandler {
       "video" in message ||
       "voice" in message ||
       "video_note" in message ||
-      "document" in message
+      "document" in message ||
+      "sticker" in (message as any)
     );
   }
 }

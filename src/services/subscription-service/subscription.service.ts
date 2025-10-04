@@ -41,6 +41,21 @@ export class SubscriptionService {
   }
 
   /**
+   * Обновляет businessConnectionId для пользователя.
+   */
+  public async updateUserBusinessConnectionId(
+    telegramId: number,
+    businessConnectionId: string | null
+  ): Promise<void> {
+    const user = await this.findOrCreateUser(telegramId);
+    user.businessConnectionId = businessConnectionId;
+    await user.save();
+    this.logger.info(
+      `User ${telegramId} updated with businessConnectionId: ${businessConnectionId}`
+    );
+  }
+
+  /**
    * Возвращает/создаёт пользователя по публичному UUID (без Telegram ID).
    */
   public async getOrCreateByUuid(userUuid: string): Promise<IUser> {
