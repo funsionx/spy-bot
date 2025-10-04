@@ -12,7 +12,7 @@ export class CacheFactory {
    * Создает сервис кэширования Redis
    */
   static async createCacheService(
-    ttlSeconds: number = 120,
+    ttlSeconds: number = 300,
     redisUrl?: string
   ): Promise<ICacheService> {
     this.logger.info("Создание Redis кэша...");
@@ -34,7 +34,7 @@ export class CacheFactory {
    * Создает кэш на основе переменных окружения
    */
   static async createFromEnv(): Promise<ICacheService> {
-    const ttlSeconds = parseInt(process.env.CACHE_TTL || "120", 10);
+    const ttlSeconds = parseInt(process.env.CACHE_TTL || "300", 10);
     const redisUrl = process.env.REDIS_URL || "redis://redis:6379";
 
     this.logger.info(`Инициализация Redis кэша...`);

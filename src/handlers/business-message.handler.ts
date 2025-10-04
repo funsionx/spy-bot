@@ -113,7 +113,7 @@ export class BusinessMessageHandler {
     }
 
     if (s3Key && this.s3Service) {
-      this.s3Service.scheduleFileDeletion(s3Key, 2 * 60 * 1000); // 2 минуты
+      this.s3Service.scheduleFileDeletion(s3Key, 5 * 60 * 1000); // 5 минут
     }
 
     const cachedMessage: CachedMessage = {

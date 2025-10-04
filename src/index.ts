@@ -14,8 +14,15 @@ import { BusinessConnectionHandler } from "./handlers/business-connection.handle
 import { SubscriptionService } from "./services/subscription-service/subscription.service";
 import { TributeWebhookHandler } from "./handlers/tribute-webhook.handler";
 import { MongoService } from "./services/mongo-service/mongo.service";
+import { H } from "@highlight-run/node";
 
 dotenv.config();
+
+H.init({
+  projectID: "odz3463e",
+  serviceName: "TruthTellerBot",
+  environment: "production",
+});
 
 class TruthTellerBot {
   private bot: Telegraf;
@@ -87,7 +94,8 @@ class TruthTellerBot {
       this.ownerId
     );
     this.businessConnectionHandler = new BusinessConnectionHandler(
-      this.ownerId
+      this.ownerId,
+      this.cacheService
     );
 
     this.logger.info("TruthTellerBot инициализирован");

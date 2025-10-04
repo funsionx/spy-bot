@@ -52,6 +52,20 @@ export class MessageEditHandler {
       `Обнаружено изменение сообщения ID: ${editedMessage.message_id}`
     );
 
+    const businessUserId = await this.cacheService.getValue(
+      `business_connection:${editedMessage.business_connection_id}:user_id`
+    );
+
+    if (
+      businessUserId &&
+      editedMessage.from?.id.toString() === businessUserId
+    ) {
+      this.logger.info(
+        `Пропуск изменения сообщения от владельца бизнес-аккаунта: ${editedMessage.from?.id}`
+      );
+      return;
+    }
+
     const subscriptionStatus =
       await this.subscriptionService.getUserSubscriptionStatus(this.ownerId);
     const trialActive = await this.subscriptionService.isTrialActive(
@@ -74,9 +88,18 @@ export class MessageEditHandler {
     );
 
     if (!originalMessage) {
-      this.logger.warn(
-        `Оригинальное сообщение не найдено в кэше для ID: ${editedMessage.message_id}`
+      const notificationCacheKey = `notification:original_not_found:${editedMessage.business_connection_id}:${editedMessage.chat.id}:${editedMessage.message_id}`;
+      const alreadyNotified = await this.cacheService.getValue(
+        notificationCacheKey
       );
+
+      if (!alreadyNotified) {
+        this.logger.warn(
+          `Оригинальное сообщение не найдено в кэше для ID: ${editedMessage.message_id}`
+        );
+        // Отправка уведомления пользователю может быть здесь, если это необходимо
+        await this.cacheService.setValue(notificationCacheKey, "true", 300); // Блокировка на 5 минут
+      }
       return;
     }
 
@@ -113,9 +136,7 @@ export class MessageEditHandler {
     const newTextFormatted =
       newText || i18next.t("common.message_without_text");
 
-    const mediaInfo = hasMedia
-      ? i18next.t("notifications.media_info")
-      : "";
+    const mediaInfo = hasMedia ? i18next.t("notifications.media_info") : "";
 
     const notification = i18next.t("notifications.edited_v2", {
       mediaIndicator,

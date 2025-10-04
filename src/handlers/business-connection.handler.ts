@@ -2,11 +2,12 @@ import { Context } from "telegraf";
 import { NotificationService } from "../services/notification-service/notification.service";
 import { Logger } from "../services/logger-service/logger.service";
 import i18next from "../i18n";
+import { ICacheService } from "../services/cache-service/cache.service.interface";
 
 export class BusinessConnectionHandler {
   private logger = Logger.getInstance();
 
-  constructor(private ownerId: number) {}
+  constructor(private ownerId: number, private cacheService: ICacheService) {}
 
   public async handle(ctx: Context) {
     const update = ctx.update as any;
@@ -21,6 +22,11 @@ export class BusinessConnectionHandler {
       );
 
       if (connection.is_enabled) {
+        await this.cacheService.setValue(
+          `business_connection:${connection.id}:user_id`,
+          connection.user.id.toString(),
+          -1
+        );
         const userName = NotificationService.escapeMarkdown(
           connection.user.first_name
         );
@@ -44,6 +50,9 @@ export class BusinessConnectionHandler {
           parse_mode: "MarkdownV2",
         });
       } else {
+        await this.cacheService.deleteValue(
+          `business_connection:${connection.id}:user_id`
+        );
         const connectionId = NotificationService.escapeMarkdown(connection.id);
 
         const notification = i18next.t(

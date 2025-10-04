@@ -44,6 +44,10 @@ export class MessageDeleteHandler {
     ctx: Context,
     deletedMessages: DeletedBusinessMessages
   ): Promise<void> {
+    const businessUserId = await this.cacheService.getValue(
+      `business_connection:${deletedMessages.business_connection_id}:user_id`
+    );
+
     const subscriptionStatus =
       await this.subscriptionService.getUserSubscriptionStatus(this.ownerId);
     const trialActive = await this.subscriptionService.isTrialActive(
@@ -77,7 +81,14 @@ export class MessageDeleteHandler {
     }
 
     if (foundMessages.length > 0) {
-      await this.sendDeleteNotifications(ctx, foundMessages, chatName);
+      // Фильтруем сообщения, отправленные владельцем бизнес-аккаунта
+      const interlocutorMessages = foundMessages.filter(
+        (msg) => msg.from?.id.toString() !== businessUserId
+      );
+
+      if (interlocutorMessages.length > 0) {
+        await this.sendDeleteNotifications(ctx, interlocutorMessages, chatName);
+      }
     }
 
     for (const messageId of deletedMessages.message_ids) {
@@ -127,9 +138,7 @@ export class MessageDeleteHandler {
         const messageText =
           message.text || i18next.t("common.message_without_text");
 
-        const mediaInfo = hasMedia
-          ? i18next.t("notifications.media_info")
-          : "";
+        const mediaInfo = hasMedia ? i18next.t("notifications.media_info") : "";
 
         const notification = i18next.t("notifications.deleted_v2", {
           mediaIndicator,
