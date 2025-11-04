@@ -5,6 +5,7 @@ import { ReferralModel } from "../models/referral.model";
 import { UserModel } from "../models/user.model";
 import type { TributeWebhookPayload } from "../types/tribute";
 import { Telegraf } from "telegraf";
+import { StatsService } from "../services/stats-service/stats.service";
 
 export class TributeWebhookHandler {
   private logger = Logger.getInstance();
@@ -12,7 +13,8 @@ export class TributeWebhookHandler {
 
   constructor(
     private subscriptionService: SubscriptionService,
-    private bot: Telegraf
+    private bot: Telegraf,
+    private statsService?: StatsService
   ) {
     if (!process.env.TRIBUTE_API_KEY) {
       throw new Error("Переменная окружения TRIBUTE_API_KEY не установлена.");
@@ -76,6 +78,16 @@ export class TributeWebhookHandler {
             this.logger.info(
               `Подписка успешно установлена для пользователя ${telegramId}, статус: ${user.subscriptionStatus}, expires_at: ${user.subscriptionEndsAt}`
             );
+
+            // Отслеживаем оплату премиума
+            if (this.statsService) {
+              await this.statsService.trackActivation(
+                telegramId,
+                "premium_payment",
+                user.telegramUsername || null
+              );
+            }
+
             // Если у пользователя есть реферер — даём ему +3 недели, один раз
             try {
               const rel = await ReferralModel.findOne({

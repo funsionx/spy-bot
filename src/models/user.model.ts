@@ -6,6 +6,7 @@ export interface IUser extends Document {
   userUuid: string; // публичный UUID для рефералок
   telegramId?: number; // может отсутствовать
   telegramUsername?: string | null; // username пользователя
+  hasTelegramPremium?: boolean | null; // наличие Telegram Premium
   businessConnectionId?: string | null;
   subscriptionStatus: SubscriptionStatus;
   subscriptionEndsAt?: Date | null;
@@ -20,6 +21,7 @@ const UserSchema = new Schema<IUser>(
     userUuid: { type: String, unique: true, required: true, index: true },
     telegramId: { type: Number, unique: true, sparse: true },
     telegramUsername: { type: String, default: null },
+    hasTelegramPremium: { type: Boolean, default: null },
     businessConnectionId: { type: String, unique: true, sparse: true },
     subscriptionStatus: {
       type: String,

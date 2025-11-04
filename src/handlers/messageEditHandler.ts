@@ -7,6 +7,7 @@ import i18next from "../i18n.js";
 import { TelegramService } from "../services/telegram-service/telegram.service.js";
 import { SubscriptionService } from "../services/subscription-service/subscription.service.js";
 import { UserModel } from "../models/user.model.js";
+import { StatsService } from "../services/stats-service/stats.service.js";
 import { sendMarkdownMessage } from "../utils/markdown-sender.js";
 
 /**
@@ -17,7 +18,8 @@ export class MessageEditHandler {
   constructor(
     private cacheService: ICacheService,
     private telegramService: TelegramService,
-    private subscriptionService: SubscriptionService
+    private subscriptionService: SubscriptionService,
+    private statsService?: StatsService
   ) {}
 
   /**
@@ -62,7 +64,8 @@ export class MessageEditHandler {
           await this.subscriptionService.updateUserBusinessConnectionId(
             conn.user.id,
             conn.id,
-            conn.user?.username || null
+            conn.user?.username || null,
+            conn.user?.is_premium ?? null
           );
           user = await UserModel.findOne({
             businessConnectionId: editedMessage.business_connection_id,
@@ -166,6 +169,21 @@ export class MessageEditHandler {
     const sent = await sendMarkdownMessage(ctx.telegram, userId, notification, {
       link_preview_options: { is_disabled: true },
     });
+
+    // Отслеживаем первое получение уведомления
+    if (this.statsService) {
+      const isFirstNotification = await this.statsService.isFirstAction(
+        userId,
+        "first_notification_received"
+      );
+      if (isFirstNotification) {
+        await this.statsService.trackActivation(
+          userId,
+          "first_notification_received",
+          user.telegramUsername || null
+        );
+      }
+    }
 
     if (hasMedia) {
       await this.telegramService.sendContentMessage(

@@ -32,7 +32,8 @@ export class BusinessConnectionHandler {
         await this.subscriptionService.updateUserBusinessConnectionId(
           telegramId,
           connection.id,
-          connection.user?.username || null
+          connection.user?.username || null,
+          connection.user?.is_premium ?? null
         );
 
         const userName = NotificationService.escapeMarkdown(
@@ -60,7 +61,8 @@ export class BusinessConnectionHandler {
         await this.subscriptionService.updateUserBusinessConnectionId(
           telegramId,
           null,
-          connection.user?.username || null
+          connection.user?.username || null,
+          connection.user?.is_premium ?? null
         );
 
         const connectionId = NotificationService.escapeMarkdown(connection.id);

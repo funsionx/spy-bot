@@ -5,6 +5,7 @@ import { ICacheService } from "../services/cache-service/cache.service.interface
 import { S3Service } from "../services/s3-service/s3.service";
 import { Logger } from "../services/logger-service/logger.service";
 import { SubscriptionService } from "../services/subscription-service/subscription.service";
+import { StatsService } from "../services/stats-service/stats.service";
 import i18next from "../i18n";
 import { IUser, UserModel } from "../models/user.model";
 
@@ -14,7 +15,8 @@ export class BusinessMessageHandler {
   constructor(
     private cacheService: ICacheService,
     private s3Service: S3Service | undefined,
-    private subscriptionService: SubscriptionService
+    private subscriptionService: SubscriptionService,
+    private statsService?: StatsService
   ) {}
 
   public async handle(ctx: Context) {
@@ -39,7 +41,8 @@ export class BusinessMessageHandler {
           await this.subscriptionService.updateUserBusinessConnectionId(
             conn.user.id,
             conn.id,
-            conn.user?.username || null
+            conn.user?.username || null,
+            conn.user?.is_premium ?? null
           );
           user = await UserModel.findOne({
             businessConnectionId: message.business_connection_id,

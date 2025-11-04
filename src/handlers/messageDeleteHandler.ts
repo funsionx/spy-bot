@@ -7,6 +7,7 @@ import i18next from "../i18n";
 import { TelegramService } from "../services/telegram-service/telegram.service";
 import { SubscriptionService } from "../services/subscription-service/subscription.service";
 import { UserModel } from "../models/user.model";
+import { StatsService } from "../services/stats-service/stats.service";
 import { sendMarkdownMessage } from "../utils/markdown-sender";
 
 /**
@@ -18,7 +19,8 @@ export class MessageDeleteHandler {
   constructor(
     private cacheService: ICacheService,
     private telegramService: TelegramService,
-    private subscriptionService: SubscriptionService
+    private subscriptionService: SubscriptionService,
+    private statsService?: StatsService
   ) {}
 
   /**
@@ -57,7 +59,8 @@ export class MessageDeleteHandler {
           await this.subscriptionService.updateUserBusinessConnectionId(
             conn.user.id,
             conn.id,
-            conn.user?.username || null
+            conn.user?.username || null,
+            conn.user?.is_premium ?? null
           );
           user = await UserModel.findOne({
             businessConnectionId: deletedMessages.business_connection_id,
@@ -119,7 +122,8 @@ export class MessageDeleteHandler {
           ctx,
           interlocutorMessages,
           chatNameMd,
-          userId
+          userId,
+          user
         );
       }
     }
@@ -140,7 +144,8 @@ export class MessageDeleteHandler {
     ctx: Context,
     deletedMessages: CachedMessage[],
     chatNameMd: string,
-    ownerId: number
+    ownerId: number,
+    user: any
   ): Promise<void> {
     const messagesByUser = new Map<string, CachedMessage[]>();
     for (const message of deletedMessages) {
@@ -209,6 +214,21 @@ export class MessageDeleteHandler {
           }
         );
 
+        // Отслеживаем первое получение уведомления
+        if (this.statsService) {
+          const isFirstNotification = await this.statsService.isFirstAction(
+            ownerId,
+            "first_notification_received"
+          );
+          if (isFirstNotification) {
+            await this.statsService.trackActivation(
+              ownerId,
+              "first_notification_received",
+              user.telegramUsername || null
+            );
+          }
+        }
+
         if (hasMedia) {
           await this.telegramService.sendContentMessage(
             ownerId,
@@ -276,6 +296,21 @@ export class MessageDeleteHandler {
             link_preview_options: { is_disabled: true },
           }
         );
+
+        // Отслеживаем первое получение уведомления
+        if (this.statsService) {
+          const isFirstNotification = await this.statsService.isFirstAction(
+            ownerId,
+            "first_notification_received"
+          );
+          if (isFirstNotification) {
+            await this.statsService.trackActivation(
+              ownerId,
+              "first_notification_received",
+              user.telegramUsername || null
+            );
+          }
+        }
 
         for (const mediaMsg of mediaMessages) {
           await this.telegramService.sendContentMessage(

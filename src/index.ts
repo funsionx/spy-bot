@@ -14,6 +14,7 @@ import { BusinessConnectionHandler } from "./handlers/business-connection.handle
 import { SubscriptionService } from "./services/subscription-service/subscription.service";
 import { TributeWebhookHandler } from "./handlers/tribute-webhook.handler";
 import { MongoService } from "./services/mongo-service/mongo.service";
+import { StatsService } from "./services/stats-service/stats.service";
 import { H } from "@highlight-run/node";
 
 dotenv.config();
@@ -32,6 +33,7 @@ class TruthTellerBot {
 
   // Services
   private subscriptionService: SubscriptionService;
+  private statsService: StatsService;
 
   // Handlers
   private commandHandler: CommandHandler;
@@ -52,6 +54,7 @@ class TruthTellerBot {
 
     // Инициализация сервисов
     this.subscriptionService = new SubscriptionService();
+    this.statsService = new StatsService();
     try {
       this.s3Service = new S3Service(this.bot);
     } catch (error) {
@@ -63,28 +66,33 @@ class TruthTellerBot {
     // Инициализация обработчиков
     this.tributeWebhookHandler = new TributeWebhookHandler(
       this.subscriptionService,
-      this.bot
+      this.bot,
+      this.statsService
     );
     this.commandHandler = new CommandHandler(
       this.cacheService,
       this.s3Service,
       telegramService,
-      this.subscriptionService
+      this.subscriptionService,
+      this.statsService
     );
     this.messageEditHandler = new MessageEditHandler(
       this.cacheService,
       telegramService,
-      this.subscriptionService
+      this.subscriptionService,
+      this.statsService
     );
     this.messageDeleteHandler = new MessageDeleteHandler(
       this.cacheService,
       telegramService,
-      this.subscriptionService
+      this.subscriptionService,
+      this.statsService
     );
     this.businessMessageHandler = new BusinessMessageHandler(
       this.cacheService,
       this.s3Service,
-      this.subscriptionService
+      this.subscriptionService,
+      this.statsService
     );
     this.businessConnectionHandler = new BusinessConnectionHandler(
       this.subscriptionService
@@ -129,6 +137,14 @@ class TruthTellerBot {
         );
         if (userLang && userLang !== i18next.language) {
           await i18next.changeLanguage(userLang);
+        }
+      }
+
+      // Проверяем feedback перед обработкой других событий
+      if (update.message && "text" in update.message) {
+        const handled = await this.commandHandler.handleFeedbackMessage(ctx);
+        if (handled) {
+          return; // Feedback обработан, не продолжаем дальше
         }
       }
 
@@ -242,6 +258,7 @@ class TruthTellerBot {
     if (this.s3Service) {
       this.s3Service.cancelAllScheduledDeletions();
     }
+    await this.statsService.flush();
     await this.cacheService.disconnect();
     await MongoService.disconnect();
     this.logger.info("Бот остановлен");

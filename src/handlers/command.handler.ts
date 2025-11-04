@@ -5,7 +5,11 @@ import { S3Service } from "../services/s3-service/s3.service";
 import { TelegramService } from "../services/telegram-service/telegram.service";
 import { Logger } from "../services/logger-service/logger.service";
 import { SubscriptionService } from "../services/subscription-service/subscription.service";
-import { replyWithMarkdown } from "../utils/markdown-sender";
+import { StatsService } from "../services/stats-service/stats.service";
+import {
+  replyWithMarkdown,
+  sendMarkdownMessage,
+} from "../utils/markdown-sender";
 
 export class CommandHandler {
   private logger = Logger.getInstance();
@@ -14,7 +18,8 @@ export class CommandHandler {
     private cacheService: ICacheService,
     private s3Service: S3Service | undefined,
     private telegramService: TelegramService,
-    private subscriptionService?: SubscriptionService
+    private subscriptionService?: SubscriptionService,
+    private statsService?: StatsService
   ) {}
 
   public register(bot: Telegraf) {
@@ -45,7 +50,18 @@ export class CommandHandler {
         try {
           const refUuid = payload.substring(4);
           if (this.subscriptionService) {
-            await this.subscriptionService.addReferralAndGrant(refUuid, userId);
+            const result = await this.subscriptionService.addReferralAndGrant(
+              refUuid,
+              userId
+            );
+            // Отслеживаем успешный реферал
+            if (result.created && this.statsService) {
+              await this.statsService.trackActivation(
+                userId,
+                "referral_success",
+                ctx.from?.username || null
+              );
+            }
           }
         } catch (e) {
           this.logger.warn(`Ошибка обработки реферального кода: ${payload}`, e);
@@ -58,8 +74,30 @@ export class CommandHandler {
       if (this.subscriptionService) {
         const user = await this.subscriptionService.findOrCreateUser(
           userId,
-          ctx.from?.username || null
+          ctx.from?.username || null,
+          ctx.from?.is_premium ?? null
         );
+
+        // Отслеживаем первый старт и DAU
+        if (this.statsService) {
+          const isFirstStart = await this.statsService.isFirstAction(
+            userId,
+            "first_start"
+          );
+          if (isFirstStart) {
+            // Обновляем счетчик активации first_start
+            const today = new Date();
+            const startOfDay = new Date(today);
+            startOfDay.setHours(0, 0, 0, 0);
+            await this.statsService.trackFirstStartActivation(
+              userId,
+              startOfDay,
+              ctx.from?.username || null
+            );
+          }
+          await this.statsService.updateDAU(userId, ctx.from?.username || null);
+        }
+
         // Отправляем приветствие отдельным сообщением без MarkdownV2
         await ctx.reply(i18next.t("notifications.welcome"));
 
@@ -90,6 +128,14 @@ export class CommandHandler {
   }
 
   private async handlePremium(ctx: Context) {
+    const userId = ctx.from?.id;
+    if (userId && this.statsService) {
+      await this.statsService.trackActivation(
+        userId,
+        "premium_button_click",
+        ctx.from?.username || null
+      );
+    }
     // Доступ всем
     await ctx.reply(i18next.t("premium.info"), {
       ...Markup.inlineKeyboard([
@@ -191,6 +237,15 @@ export class CommandHandler {
   private async handleReferral(ctx: Context) {
     const userId = ctx.from?.id;
     if (!userId) return;
+
+    if (this.statsService) {
+      await this.statsService.trackActivation(
+        userId,
+        "referral_button_click",
+        ctx.from?.username || null
+      );
+    }
+
     const botInfo = await (ctx.telegram as any).getMe();
     const botUsername: string = botInfo.username;
 
@@ -200,7 +255,8 @@ export class CommandHandler {
     }
     const user = await this.subscriptionService.findOrCreateUser(
       userId,
-      ctx.from?.username || null
+      ctx.from?.username || null,
+      ctx.from?.is_premium ?? null
     );
     const link = this.subscriptionService.getReferralLink(
       botUsername,
@@ -217,6 +273,15 @@ export class CommandHandler {
   private async handleInviteReferral(ctx: Context) {
     const userId = ctx.from?.id;
     if (!userId) return;
+
+    if (this.statsService) {
+      await this.statsService.trackActivation(
+        userId,
+        "referral_button_click",
+        ctx.from?.username || null
+      );
+    }
+
     if (!this.subscriptionService) {
       await ctx.answerCbQuery(i18next.t("notifications.service_unavailable"), {
         show_alert: true,
@@ -227,7 +292,8 @@ export class CommandHandler {
     const botUsername: string = botInfo.username;
     const user = await this.subscriptionService.findOrCreateUser(
       userId,
-      ctx.from?.username || null
+      ctx.from?.username || null,
+      ctx.from?.is_premium ?? null
     );
     const link = this.subscriptionService.getReferralLink(
       botUsername,
@@ -243,7 +309,88 @@ export class CommandHandler {
   }
 
   private async handleFeedback(ctx: Context) {
+    const userId = ctx.from?.id;
+    if (!userId) return;
+
+    // Сохраняем состояние ожидания feedback
+    await this.cacheService.setValue(
+      `user:${userId}:awaiting_feedback`,
+      "true",
+      300
+    ); // 5 минут
     await ctx.reply(i18next.t("feedback.prompt"));
+  }
+
+  /**
+   * Обрабатывает текстовое сообщение как feedback, если пользователь ожидает feedback
+   */
+  public async handleFeedbackMessage(ctx: Context): Promise<boolean> {
+    const userId = ctx.from?.id;
+    if (!userId) return false;
+
+    // Проверяем, ожидает ли пользователь feedback
+    const awaitingFeedback = await this.cacheService.getValue(
+      `user:${userId}:awaiting_feedback`
+    );
+    if (!awaitingFeedback) {
+      return false; // Не ожидает feedback
+    }
+
+    // Проверяем, что это текстовое сообщение
+    if (!ctx.message || !("text" in ctx.message)) {
+      return false;
+    }
+
+    // Если это команда - скипаем и убираем состояние ожидания
+    const text = ctx.message.text;
+    if (text.startsWith("/")) {
+      await this.cacheService.deleteValue(`user:${userId}:awaiting_feedback`);
+      return false;
+    }
+
+    // Убираем состояние ожидания
+    await this.cacheService.deleteValue(`user:${userId}:awaiting_feedback`);
+
+    // Отправляем feedback владельцу
+    const ownerId = process.env.OWNER_ID;
+    if (!ownerId) {
+      this.logger.warn("OWNER_ID не установлен, невозможно отправить feedback");
+      await ctx.reply(i18next.t("feedback.error"));
+      return true;
+    }
+
+    try {
+      // Анонимизируем текст - убираем username
+      let anonymizedText = text;
+      const username = ctx.from?.username;
+      if (username) {
+        // Убираем упоминания username в разных форматах
+        const usernamePatterns = [
+          new RegExp(`@${username}`, "gi"),
+          new RegExp(`\\b${username}\\b`, "gi"),
+        ];
+        usernamePatterns.forEach((pattern) => {
+          anonymizedText = anonymizedText.replace(pattern, "[username]");
+        });
+      }
+
+      const userName = ctx.from?.first_name || "Unknown";
+
+      const notification = i18next.t("feedback.owner_notification", {
+        userName: userName,
+        userId: userId,
+        message: anonymizedText,
+      });
+
+      await sendMarkdownMessage(ctx.telegram, Number(ownerId), notification);
+
+      await ctx.reply(i18next.t("feedback.received"));
+      return true;
+    } catch (error) {
+      this.logger.error("Ошибка при отправке feedback:", error);
+      await ctx.reply(i18next.t("feedback.error"));
+      return true;
+    }
   }
 
   private async handleChooseChat(ctx: Context & { match: RegExpExecArray }) {

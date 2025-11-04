@@ -5,6 +5,7 @@ export interface BusinessConnection {
     is_bot: boolean;
     first_name: string;
     username?: string;
+    is_premium?: boolean;
   };
   user_chat_id: number;
   date: number;
@@ -48,6 +49,7 @@ export interface User {
   first_name: string;
   last_name?: string;
   username?: string;
+  is_premium?: boolean;
 }
 
 export interface Chat {

@@ -26,12 +26,25 @@ export class SubscriptionService {
    */
   public async findOrCreateUser(
     telegramId: number,
-    telegramUsername?: string | null
+    telegramUsername?: string | null,
+    hasTelegramPremium?: boolean | null
   ): Promise<IUser> {
     let user = await UserModel.findOne({ telegramId }).exec();
     if (user) {
+      let updated = false;
       if (telegramUsername && user.telegramUsername !== telegramUsername) {
         user.telegramUsername = telegramUsername;
+        updated = true;
+      }
+      if (
+        hasTelegramPremium !== undefined &&
+        hasTelegramPremium !== null &&
+        user.hasTelegramPremium !== hasTelegramPremium
+      ) {
+        user.hasTelegramPremium = hasTelegramPremium;
+        updated = true;
+      }
+      if (updated) {
         await user.save();
       }
       return user;
@@ -43,6 +56,7 @@ export class SubscriptionService {
       userUuid: randomUUID(),
       telegramId,
       telegramUsername: telegramUsername || null,
+      hasTelegramPremium: hasTelegramPremium ?? null,
       subscriptionStatus: "FREE",
       // Старт триала на 14 дней
       trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
@@ -56,16 +70,24 @@ export class SubscriptionService {
   public async updateUserBusinessConnectionId(
     telegramId: number,
     businessConnectionId: string | null,
-    telegramUsername?: string | null
+    telegramUsername?: string | null,
+    hasTelegramPremium?: boolean | null
   ): Promise<void> {
-    const user = await this.findOrCreateUser(telegramId, telegramUsername);
+    const user = await this.findOrCreateUser(
+      telegramId,
+      telegramUsername,
+      hasTelegramPremium
+    );
     user.businessConnectionId = businessConnectionId;
     if (telegramUsername) {
       user.telegramUsername = telegramUsername;
     }
+    if (hasTelegramPremium !== undefined && hasTelegramPremium !== null) {
+      user.hasTelegramPremium = hasTelegramPremium;
+    }
     await user.save();
     this.logger.info(
-      `User ${telegramId} updated with businessConnectionId: ${businessConnectionId}, username: ${telegramUsername}`
+      `User ${telegramId} updated with businessConnectionId: ${businessConnectionId}, username: ${telegramUsername}, hasTelegramPremium: ${hasTelegramPremium}`
     );
   }
 
@@ -205,6 +227,17 @@ export class SubscriptionService {
     const referrer = await UserModel.findOne({ userUuid: referrerUuid }).exec();
     if (!referrer) {
       this.logger.warn(`Referrer с UUID ${referrerUuid} не найден`);
+      const referred = await this.findOrCreateUser(referredTelegramId, null);
+      return { referred, created: false };
+    }
+
+    // Проверяем, что пользователь не переходит по своей собственной реферальной ссылке
+    if (referrer.telegramId === referredTelegramId) {
+      this.logger.warn(
+        `Пользователь ${referredTelegramId} пытается перейти по своей собственной реферальной ссылке`
+      );
+      const referred = await this.findOrCreateUser(referredTelegramId, null);
+      return { referrer, referred, created: false };
     }
 
     const referred = await this.findOrCreateUser(referredTelegramId, null);
@@ -214,41 +247,36 @@ export class SubscriptionService {
       referred: referred._id,
     }).exec();
     if (existing) {
-      const base = { referred, created: false };
-      return referrer ? { referrer, ...base } : base;
+      return { referrer, referred, created: false };
     }
 
-    if (referrer) {
-      await ReferralModel.create({
-        referrer: referrer._id,
-        referred: referred._id,
-      });
-      // Бонус: +1 неделя к текущему периоду (триал или подписка)
-      const now = new Date();
-      const currentEnd =
-        referrer.subscriptionEndsAt && referrer.subscriptionEndsAt > now
-          ? referrer.subscriptionEndsAt
-          : referrer.trialEndsAt && referrer.trialEndsAt > now
-          ? referrer.trialEndsAt
-          : now;
-      const bonusEnds = new Date(
-        currentEnd.getTime() + 7 * 24 * 60 * 60 * 1000
-      );
-      // Если бонус накладывается на триал — продлеваем триал; иначе продлеваем подписку и включаем PREMIUM
-      if (
-        referrer.trialEndsAt &&
-        referrer.trialEndsAt > now &&
-        currentEnd === referrer.trialEndsAt
-      ) {
-        referrer.trialEndsAt = bonusEnds;
-      } else {
-        referrer.subscriptionStatus = "PREMIUM";
-        referrer.subscriptionEndsAt = bonusEnds;
-      }
-      await referrer.save();
-    }
+    await ReferralModel.create({
+      referrer: referrer._id,
+      referred: referred._id,
+    });
 
-    const base = { referred, created: true };
-    return referrer ? { referrer, ...base } : base;
+    // Бонус: +1 неделя к текущему периоду (триал или подписка)
+    const now = new Date();
+    const currentEnd =
+      referrer.subscriptionEndsAt && referrer.subscriptionEndsAt > now
+        ? referrer.subscriptionEndsAt
+        : referrer.trialEndsAt && referrer.trialEndsAt > now
+        ? referrer.trialEndsAt
+        : now;
+    const bonusEnds = new Date(currentEnd.getTime() + 7 * 24 * 60 * 60 * 1000);
+    // Если бонус накладывается на триал — продлеваем триал; иначе продлеваем подписку и включаем PREMIUM
+    if (
+      referrer.trialEndsAt &&
+      referrer.trialEndsAt > now &&
+      currentEnd === referrer.trialEndsAt
+    ) {
+      referrer.trialEndsAt = bonusEnds;
+    } else {
+      referrer.subscriptionStatus = "PREMIUM";
+      referrer.subscriptionEndsAt = bonusEnds;
+    }
+    await referrer.save();
+
+    return { referrer, referred, created: true };
   }
 }

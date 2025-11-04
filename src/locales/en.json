@@ -77,8 +77,9 @@
     "trial_active": "Your trial is active. Chat limits are not applied yet."
   },
   "feedback": {
-    "prompt": "💬 *Feedback & Suggestions*\n\nPlease send your message in the next text:\n\n• Ideas for improvements\n• Bugs you've found\n• Wishes and reviews\n\nI will definitely read your message! 🙏",
-    "received": "✅ *Thank you for your feedback!*\n\nYour message has been sent to the developer. I will definitely consider your suggestions! 💚",
-    "owner_notification": "📨 *New feedback from user*\n\n👤 *User:* {{userName}}{{usernameLine}}\n🆔 *ID:* `{{userId}}`\n\n───────────────\n{{message}}\n───────────────"
+    "prompt": "💬 *Feedback & Suggestions*\n\nPlease send your message in the next text:\n\n• Ideas for improvements\n• Bugs you've found\n• Wishes and reviews\n\nI will definitely read your message\\! 🙏",
+    "received": "✅ *Thank you for your feedback\\!*\n\nYour message has been sent to the developer\\. I will definitely consider your suggestions\\! 💚",
+    "owner_notification": "📨 *New feedback from user*\n\n👤 *User:* {{userName}}\n🆔 *ID:* `{{userId}}`\n\n───────────────\n{{message}}\n───────────────",
+    "error": "❌ An error occurred while sending feedback\\. Please try again later\\."
   }
 }
