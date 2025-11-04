@@ -50,19 +50,32 @@ export class TributeWebhookHandler {
       payload.expires_at || payload.subscription?.expires_at || null;
 
     this.logger.info(
-      `Получен веб-хук от Tribute: ${name} для пользователя ${telegramId}`
+      `Получен веб-хук от Tribute: ${name} для пользователя ${telegramId}, expires_at: ${expiresAt}`
     );
+
+    if (!telegramId) {
+      this.logger.error(
+        "Tribute Webhook: telegram_user_id не найден в payload"
+      );
+      return new Response("telegram_user_id is required", { status: 400 });
+    }
 
     try {
       switch (name) {
         case "new_subscription":
           {
+            this.logger.info(
+              `Обработка new_subscription для пользователя ${telegramId}, expires_at: ${expiresAt}`
+            );
             const user =
               await this.subscriptionService.setUserSubscriptionStatus(
                 telegramId,
                 "PREMIUM",
                 expiresAt
               );
+            this.logger.info(
+              `Подписка успешно установлена для пользователя ${telegramId}, статус: ${user.subscriptionStatus}, expires_at: ${user.subscriptionEndsAt}`
+            );
             // Если у пользователя есть реферер — даём ему +3 недели, один раз
             try {
               const rel = await ReferralModel.findOne({
@@ -95,7 +108,7 @@ export class TributeWebhookHandler {
           } catch (e) {
             this.logger.warn(
               "Не удалось отправить благодарность пользователю:",
-              e as any
+              e
             );
           }
           break;

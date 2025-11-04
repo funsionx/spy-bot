@@ -28,6 +28,59 @@ services:
     networks:
       - spy-bot-network
 
+  prometheus:
+    image: prom/prometheus
+    container_name: spy-bot-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - spy-bot-network
+
+  grafana:
+    image: grafana/grafana
+    container_name: spy-bot-grafana
+    restart: unless-stopped
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3001:3000"
+    networks:
+      - spy-bot-network
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SERVER_ROOT_URL=http://${GRAFANA_IP:-localhost}:3001
+      - GF_SERVER_HTTP_ADDR=0.0.0.0
+    depends_on:
+      - prometheus
+
+  redis-exporter:
+    image: oliver006/redis_exporter
+    container_name: spy-bot-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "9121:9121"
+    networks:
+      - spy-bot-network
+
+  mongodb-exporter:
+    image: bitnami/mongodb-exporter
+    container_name: spy-bot-mongodb-exporter
+    restart: unless-stopped
+    environment:
+      MONGODB_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/
+    ports:
+      - "9216:9216"
+    networks:
+      - spy-bot-network
+
   app:
     build: .
     container_name: spy-bot-app
@@ -47,6 +100,7 @@ services:
 volumes:
   redis_data:
   mongo_data:
+  grafana_data:
 
 networks:
   spy-bot-network:

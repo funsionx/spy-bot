@@ -69,16 +69,17 @@ export class NotificationService {
 
   /**
    * Возвращает безопасное MarkdownV2 представление чата:
-   * - @username с кликабельной ссылкой, если доступен
+   * - @username (Имя Фамилия) с кликабельной ссылкой, если доступен
    * - иначе экранированное название чата
    */
   static getChatDisplayMarkdown(chat: Chat): string {
+    const name = this.getChatDisplayName(chat);
     if (chat.username) {
       const uname = chat.username;
-      // @username как кликабельная ссылка
-      return `[@${uname}](https://t.me/${uname})`;
+      const escapedName = this.escapeMarkdown(name);
+      // @username (Имя Фамилия) как кликабельная ссылка
+      return `[@${uname}](https://t.me/${uname}) \\(${escapedName}\\)`;
     }
-    const name = this.getChatDisplayName(chat);
     return this.escapeMarkdown(name);
   }
 

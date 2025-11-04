@@ -17,18 +17,18 @@
     "get_media_error": "❌ Failed to get the file. Check the logs",
     "service_unavailable": "Service unavailable",
     "invalid_chat": "Invalid chat",
-    "business_connection_enabled": "✅ *Business connection activated!*",
+    "business_connection_enabled": "✅ *Business connection activated\\!*",
     "business_connection_disabled": "❌ *Business connection deactivated*",
     "connection_id": "🔗 ID: `{{id}}`",
     "connection_user": "👤 User: {{userName}}",
     "connection_date": "📅 Date: {{date}}",
-    "connection_enabled_message": "Now the bot will track changes in your chats",
-    "connection_disabled_message": "The bot will no longer track changes in chats",
-    "edited_v2": "╭─────────────────────╮\n📝 *MESSAGE EDITED*{{mediaIndicator}}\n╰─────────────────────╯\n\n💬 Chat with \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ ⏮️ BEFORE ═══╗\n{{oldTextFormatted}}\n\n╔═══ ⏭️ AFTER ═══╗\n{{newTextFormatted}}\n\n──────────────────────",
-    "media_info": "\n💾 Content detected, it is attached to this message.\n",
-    "deleted_v2": "╭─────────────────────╮\n🗑️ *MESSAGE DELETED*{{mediaIndicator}}\n╰─────────────────────╯\n\n💬 Chat with \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 TEXT ═══╗\n{{messageText}}\n\n──────────────────────",
-    "deleted_media_only_v2": "╭─────────────────────╮\n🗑️ *MESSAGE DELETED*{{mediaIndicator}}\n╰─────────────────────╯\n\n💬 Chat with \"{{chatName}}\"{{mediaInfo}}\n\n──────────────────────",
-    "deleted_multiple_v2": "╭─────────────────────╮\n🗑️ *{{count}} MESSAGES DELETED*{{mediaIndicator}}\n╰─────────────────────╯\n\n💬 Chat with \"{{chatName}}\"{{mediaInfo}}\n\n╔═══ 📜 MESSAGES ═══╗{{messagesText}}\n\n──────────────────────",
+    "connection_enabled_message": "Now the bot will track changes in your chats\\.",
+    "connection_disabled_message": "The bot will no longer track changes in chats\\.",
+    "edited_v2": "📝 *MESSAGE EDITED*{{mediaIndicator}}\n\n💬 Chat with {{chatName}}{{mediaInfo}}\n\n⏮️ BEFORE\n{{oldTextFormatted}}\n\n⏭️ AFTER\n{{newTextFormatted}}\n\n────────────────",
+    "media_info": "\n\n💾 Content detected, it is attached to this message\\.",
+    "deleted_v2": "🗑️ *MESSAGE DELETED*{{mediaIndicator}}\n\n💬 Chat with {{chatName}}{{mediaInfo}}\n\n⏮️ BEFORE\n{{messageText}}\n\n────────────────",
+    "deleted_media_only_v2": "🗑️ *MESSAGE DELETED*{{mediaIndicator}}\n\n💬 Chat with {{chatName}}{{mediaInfo}}\n\n────────────────",
+    "deleted_multiple_v2": "🗑️ *{{count}} MESSAGES DELETED*{{mediaIndicator}}\n\n💬 Chat with \"{{chatName}}\"{{mediaInfo}}\n\n📜 MESSAGES{{messagesText}}\n\n",
     "media_from_message": "📎 Media from message #{{index}}",
     "business_connection_enabled_v2": "{{title}}\n\n{{id}}\n{{user}}\n{{date}}\n\n{{message}}",
     "business_connection_disabled_v2": "{{title}}\n\n{{id}}\n\n{{message}}"
@@ -55,7 +55,7 @@
     "referral": "🔗 Get referral link",
     "feedback": "💬 Send feedback"
   },
-  "help_text": "📖 *TruthTellerBot Help*\n\n🔍 *Features:*\\n• Track message edits\\n• Track message deletions\\n• Save deleted media\\n• Real\\-time notifications\\n\\n⚙️ *Setup:*\\n1\\. Telegram \\> Settings \\> Business\\n2\\. Chat Bots \\> Add Bot\\n3\\. Select this bot\\n\\n🎯 *Commands:*\\n/start \\- start & help\\n/get\\_latest\\_media \\- get latest media file\\n/help \\- this help\\n/set\\_language \\- change language\\n/premium \\- get premium access\\n/referral \\- get referral link\\n\\n⚠️ *Important:*\\nThe bot does not save messages. All notifications are sent only to this chat.",
+  "help_text": "📖 *TruthTellerBot Help*\n\n🔍 *Features:*\n• Track message edits\n• Track message deletions\n• Save deleted media\n• Real\\-time notifications\n\n⚙️ *Setup:*\n1\\. Telegram \\> Settings \\> Business\n2\\. Chat Bots \\> Add Bot\n3\\. Select this bot\n\n🎯 *Commands:*\n/start \\- start & help\n/get\\_latest\\_media \\- get latest media file\n/help \\- this help\n/set\\_language \\- change language\n/premium \\- get premium access\n/referral \\- get referral link\n\n⚠️ *Important:*\nThe bot does not save messages\\. All notifications are sent only to this chat\\.",
   "language": {
     "select": "Please select a language:",
     "changed": "✅ Language has been successfully changed to: {{lang}}"
@@ -70,8 +70,9 @@
     "invite_friend": "Invite a friend"
   },
   "limits": {
-    "choose_option": "Your trial has ended. Choose an option:",
+    "choose_option": "Your trial has ended. In free mode, you can track only one chat. Choose an option:",
     "choose_this_chat": "Choose this chat",
+    "choose_chat_with": "Choose chat with @{{username}}",
     "chat_selected": "This chat is selected for tracking",
     "trial_active": "Your trial is active. Chat limits are not applied yet."
   },

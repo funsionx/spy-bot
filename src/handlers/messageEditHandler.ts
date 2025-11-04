@@ -7,6 +7,7 @@ import i18next from "../i18n.js";
 import { TelegramService } from "../services/telegram-service/telegram.service.js";
 import { SubscriptionService } from "../services/subscription-service/subscription.service.js";
 import { UserModel } from "../models/user.model.js";
+import { sendMarkdownMessage } from "../utils/markdown-sender.js";
 
 /**
  * Обработчик изменений сообщений через Telegram Business API
@@ -60,7 +61,8 @@ export class MessageEditHandler {
         if (conn?.user?.id && conn?.id) {
           await this.subscriptionService.updateUserBusinessConnectionId(
             conn.user.id,
-            conn.id
+            conn.id,
+            conn.user?.username || null
           );
           user = await UserModel.findOne({
             businessConnectionId: editedMessage.business_connection_id,
@@ -142,7 +144,9 @@ export class MessageEditHandler {
       );
     }
 
-    const chatName = NotificationService.getChatDisplayName(editedMessage.chat);
+    const chatNameMd = NotificationService.getChatDisplayMarkdown(
+      editedMessage.chat
+    );
     const hasMedia = !!originalMessage.s3Key;
     const mediaIndicator = hasMedia ? " 📎" : "";
 
@@ -153,17 +157,14 @@ export class MessageEditHandler {
 
     const notification = i18next.t("notifications.edited_v2", {
       mediaIndicator,
-      chatName: NotificationService.escapeMarkdown(chatName),
-      mediaInfo: NotificationService.escapeMarkdown(
-        hasMedia ? i18next.t("notifications.media_info") : ""
-      ),
-      oldTextFormatted: NotificationService.escapeMarkdown(oldTextFormattedRaw),
-      newTextFormatted: NotificationService.escapeMarkdown(newTextFormattedRaw),
+      chatName: chatNameMd,
+      mediaInfo: hasMedia ? i18next.t("notifications.media_info") : "",
+      oldTextFormatted: NotificationService.escapeForCode(oldTextFormattedRaw),
+      newTextFormatted: NotificationService.escapeForCode(newTextFormattedRaw),
     });
 
-    const sent = await ctx.telegram.sendMessage(userId, notification, {
+    const sent = await sendMarkdownMessage(ctx.telegram, userId, notification, {
       link_preview_options: { is_disabled: true },
-      parse_mode: "MarkdownV2",
     });
 
     if (hasMedia) {

@@ -53,6 +53,7 @@ export class S3Service {
       | Message.VoiceMessage
       | Message.VideoNoteMessage
       | Message.DocumentMessage
+      | Message.StickerMessage
   ): Promise<string | null> {
     const fileId = this.getFileId(message);
     if (!fileId || !message.from) {
@@ -224,7 +225,11 @@ export class S3Service {
       | Message.VoiceMessage
       | Message.VideoNoteMessage
       | Message.DocumentMessage
+      | Message.StickerMessage
   ): string | undefined {
+    if ("sticker" in message) {
+      return message.sticker.file_id;
+    }
     if ("video" in message) {
       return message.video.file_id;
     }
@@ -253,7 +258,9 @@ export class S3Service {
       | Message.VoiceMessage
       | Message.VideoNoteMessage
       | Message.DocumentMessage
+      | Message.StickerMessage
   ): string {
+    if ("sticker" in message) return "sticker";
     if ("video_note" in message) return "videonote";
     if ("voice" in message) return "voice";
     if ("video" in message) return "video";
@@ -267,10 +274,17 @@ export class S3Service {
       | Message.PhotoMessage
       | Message.VoiceMessage
       | Message.VideoNoteMessage
-      | Message.DocumentMessage,
+      | Message.DocumentMessage
+      | Message.StickerMessage,
     contentType?: string,
     href?: string
   ): string {
+    if ("sticker" in message) {
+      if (message.sticker.is_animated || message.sticker.is_video) {
+        return ".webm";
+      }
+      return ".webp";
+    }
     // 1) Используем исходное имя файла, если доступно
     if ("document" in message && message.document?.file_name) {
       const ext = path.extname(message.document.file_name);

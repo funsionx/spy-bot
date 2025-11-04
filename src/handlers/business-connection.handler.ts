@@ -3,7 +3,7 @@ import { NotificationService } from "../services/notification-service/notificati
 import { Logger } from "../services/logger-service/logger.service";
 import i18next from "../i18n";
 import { SubscriptionService } from "../services/subscription-service/subscription.service";
-import { UserModel } from "../models/user.model";
+import { sendMarkdownMessage } from "../utils/markdown-sender";
 
 export class BusinessConnectionHandler {
   private logger = Logger.getInstance();
@@ -31,7 +31,8 @@ export class BusinessConnectionHandler {
         // Обновляем businessConnectionId для пользователя через сервис
         await this.subscriptionService.updateUserBusinessConnectionId(
           telegramId,
-          connection.id
+          connection.id,
+          connection.user?.username || null
         );
 
         const userName = NotificationService.escapeMarkdown(
@@ -53,14 +54,13 @@ export class BusinessConnectionHandler {
           }
         );
 
-        await ctx.telegram.sendMessage(telegramId, notification, {
-          parse_mode: "MarkdownV2",
-        });
+        await sendMarkdownMessage(ctx.telegram, telegramId, notification);
       } else {
         // Удаляем businessConnectionId у пользователя через сервис
         await this.subscriptionService.updateUserBusinessConnectionId(
           telegramId,
-          null
+          null,
+          connection.user?.username || null
         );
 
         const connectionId = NotificationService.escapeMarkdown(connection.id);
@@ -74,9 +74,7 @@ export class BusinessConnectionHandler {
           }
         );
 
-        await ctx.telegram.sendMessage(telegramId, notification, {
-          parse_mode: "MarkdownV2",
-        });
+        await sendMarkdownMessage(ctx.telegram, telegramId, notification);
       }
     } catch (error) {
       this.logger.error("Ошибка обработки business_connection:", error);

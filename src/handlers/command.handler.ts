@@ -5,6 +5,7 @@ import { S3Service } from "../services/s3-service/s3.service";
 import { TelegramService } from "../services/telegram-service/telegram.service";
 import { Logger } from "../services/logger-service/logger.service";
 import { SubscriptionService } from "../services/subscription-service/subscription.service";
+import { replyWithMarkdown } from "../utils/markdown-sender";
 
 export class CommandHandler {
   private logger = Logger.getInstance();
@@ -55,7 +56,10 @@ export class CommandHandler {
     // Создаем/обновляем пользователя в базе
     try {
       if (this.subscriptionService) {
-        const user = await this.subscriptionService.findOrCreateUser(userId);
+        const user = await this.subscriptionService.findOrCreateUser(
+          userId,
+          ctx.from?.username || null
+        );
         // Отправляем приветствие отдельным сообщением без MarkdownV2
         await ctx.reply(i18next.t("notifications.welcome"));
 
@@ -181,8 +185,7 @@ export class CommandHandler {
 
   private async sendHelpMessage(ctx: any): Promise<void> {
     const help = i18next.t("help_text");
-    // Отправляем как простой текст без Markdown, чтобы избежать ошибок экранирования
-    await ctx.reply(help);
+    await replyWithMarkdown(ctx, help);
   }
 
   private async handleReferral(ctx: Context) {
@@ -195,7 +198,10 @@ export class CommandHandler {
       await ctx.reply(i18next.t("notifications.service_unavailable"));
       return;
     }
-    const user = await this.subscriptionService.findOrCreateUser(userId);
+    const user = await this.subscriptionService.findOrCreateUser(
+      userId,
+      ctx.from?.username || null
+    );
     const link = this.subscriptionService.getReferralLink(
       botUsername,
       user.userUuid
@@ -219,7 +225,10 @@ export class CommandHandler {
     }
     const botInfo = await (ctx.telegram as any).getMe();
     const botUsername: string = botInfo.username;
-    const user = await this.subscriptionService.findOrCreateUser(userId);
+    const user = await this.subscriptionService.findOrCreateUser(
+      userId,
+      ctx.from?.username || null
+    );
     const link = this.subscriptionService.getReferralLink(
       botUsername,
       user.userUuid

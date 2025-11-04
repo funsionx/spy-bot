@@ -26,6 +26,7 @@ export interface BusinessMessage {
   document?: Document;
   voice?: Voice;
   video_note?: VideoNote;
+  sticker?: Sticker;
 }
 
 export interface DeletedBusinessMessages {
@@ -116,6 +117,24 @@ export interface VideoNote {
   file_size?: number;
 }
 
+export interface Sticker {
+  file_id: string;
+  file_unique_id: string;
+  type: string;
+  width: number;
+  height: number;
+  is_animated?: boolean;
+  is_video?: boolean;
+  thumb?: PhotoSize;
+  emoji?: string;
+  set_name?: string;
+  premium_animation?: any;
+  mask_position?: any;
+  custom_emoji_id?: string;
+  needs_repainting?: boolean;
+  file_size?: number;
+}
+
 export interface CachedMessage {
   message_id: number;
   text?: string;
@@ -130,6 +149,7 @@ export interface CachedMessage {
   document?: Document;
   voice?: Voice;
   video_note?: VideoNote;
+  sticker?: Sticker;
   s3Key?: string | null;
 }
 

@@ -38,7 +38,8 @@ export class BusinessMessageHandler {
         if (conn?.user?.id && conn?.id) {
           await this.subscriptionService.updateUserBusinessConnectionId(
             conn.user.id,
-            conn.id
+            conn.id,
+            conn.user?.username || null
           );
           user = await UserModel.findOne({
             businessConnectionId: message.business_connection_id,
@@ -83,6 +84,12 @@ export class BusinessMessageHandler {
         this.logger.info(
           `Пользователь ${userId} (FREE) пытается отслеживать новый чат. Отклонено.`
         );
+        // Получаем username чата для отображения на кнопке
+        const chatUsername = message.chat.username;
+        const buttonText = chatUsername
+          ? i18next.t("limits.choose_chat_with", { username: chatUsername })
+          : i18next.t("limits.choose_this_chat");
+
         // Покажем владельцу варианты: оформить подписку, пригласить реферала, выбрать этот чат
         await ctx.telegram.sendMessage(
           userId,
@@ -91,7 +98,7 @@ export class BusinessMessageHandler {
             ...Markup.inlineKeyboard([
               [
                 Markup.button.callback(
-                  i18next.t("limits.choose_this_chat"),
+                  buttonText,
                   `choose_chat_${message.chat.id}`
                 ),
               ],
@@ -139,7 +146,8 @@ export class BusinessMessageHandler {
         Message.VideoMessage &
         Message.VoiceMessage &
         Message.VideoNoteMessage &
-        Message.DocumentMessage;
+        Message.DocumentMessage &
+        Message.StickerMessage;
       s3Key = await this.s3Service.uploadMedia(mediaMessage);
       if (!s3Key) {
         this.logger.warn(

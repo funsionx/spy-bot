@@ -101,9 +101,13 @@ class TruthTellerBot {
       "MONGODB_URI",
     ];
     for (const varName of requiredVars) {
-      if (!process.env[varName]) {
-        throw new Error(`❌ Переменная окружения ${varName} не установлена`);
+      const value = process.env[varName];
+      if (!value) {
+        throw new Error(
+          `❌ Переменная окружения ${varName} не установлена. Проверьте .env файл.`
+        );
       }
+      this.logger.debug(`✅ ${varName} установлена`);
     }
   }
 
@@ -251,7 +255,13 @@ async function main(): Promise<void> {
     await initializeI18n();
     const cacheService = await CacheFactory.createFromEnv();
     // Инициализируем подключение к MongoDB при старте
-    await MongoService.connect(process.env.MONGODB_URI!);
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) {
+      throw new Error(
+        "Переменная окружения MONGODB_URI не установлена. Проверьте .env файл."
+      );
+    }
+    await MongoService.connect(mongoUri);
     botInstance = new TruthTellerBot(cacheService);
     await botInstance.start();
   } catch (error) {

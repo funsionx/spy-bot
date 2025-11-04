@@ -24,15 +24,25 @@ export class SubscriptionService {
    * Возвращает пользователя по Telegram ID, создавая нового при отсутствии.
    * У нового пользователя генерируется публичный UUID.
    */
-  public async findOrCreateUser(telegramId: number): Promise<IUser> {
+  public async findOrCreateUser(
+    telegramId: number,
+    telegramUsername?: string | null
+  ): Promise<IUser> {
     let user = await UserModel.findOne({ telegramId }).exec();
-    if (user) return user;
+    if (user) {
+      if (telegramUsername && user.telegramUsername !== telegramUsername) {
+        user.telegramUsername = telegramUsername;
+        await user.save();
+      }
+      return user;
+    }
     this.logger.info(
-      `Создаем нового пользователя с Telegram ID: ${telegramId}`
+      `Создаем нового пользователя с Telegram ID: ${telegramId}, username: ${telegramUsername}`
     );
     user = await UserModel.create({
       userUuid: randomUUID(),
       telegramId,
+      telegramUsername: telegramUsername || null,
       subscriptionStatus: "FREE",
       // Старт триала на 14 дней
       trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
@@ -45,13 +55,17 @@ export class SubscriptionService {
    */
   public async updateUserBusinessConnectionId(
     telegramId: number,
-    businessConnectionId: string | null
+    businessConnectionId: string | null,
+    telegramUsername?: string | null
   ): Promise<void> {
-    const user = await this.findOrCreateUser(telegramId);
+    const user = await this.findOrCreateUser(telegramId, telegramUsername);
     user.businessConnectionId = businessConnectionId;
+    if (telegramUsername) {
+      user.telegramUsername = telegramUsername;
+    }
     await user.save();
     this.logger.info(
-      `User ${telegramId} updated with businessConnectionId: ${businessConnectionId}`
+      `User ${telegramId} updated with businessConnectionId: ${businessConnectionId}, username: ${telegramUsername}`
     );
   }
 
@@ -72,7 +86,7 @@ export class SubscriptionService {
   public async getUserSubscriptionStatus(
     telegramId: number
   ): Promise<SubscriptionStatus> {
-    const user = await this.findOrCreateUser(telegramId);
+    const user = await this.findOrCreateUser(telegramId, null);
     if (
       user.subscriptionStatus === "PREMIUM" &&
       user.subscriptionEndsAt &&
@@ -91,7 +105,7 @@ export class SubscriptionService {
 
   /** Возвращает true, если триал активен. */
   public async isTrialActive(telegramId: number): Promise<boolean> {
-    const user = await this.findOrCreateUser(telegramId);
+    const user = await this.findOrCreateUser(telegramId, null);
     return !!(user.trialEndsAt && user.trialEndsAt.getTime() > Date.now());
   }
 
@@ -112,7 +126,7 @@ export class SubscriptionService {
     status: SubscriptionStatus,
     expiresAtISO: string | null
   ): Promise<IUser> {
-    const user = await this.findOrCreateUser(telegramId);
+    const user = await this.findOrCreateUser(telegramId, null);
     user.subscriptionStatus = status;
     user.subscriptionEndsAt = expiresAtISO ? new Date(expiresAtISO) : null;
     await user.save();
@@ -153,7 +167,7 @@ export class SubscriptionService {
    * Возвращает ID отслеживаемого чата для FREE-пользователя.
    */
   public async getTrackedChatId(telegramId: number): Promise<number | null> {
-    const user = await this.findOrCreateUser(telegramId);
+    const user = await this.findOrCreateUser(telegramId, null);
     return user.trackedChatId ?? null;
   }
 
@@ -193,7 +207,7 @@ export class SubscriptionService {
       this.logger.warn(`Referrer с UUID ${referrerUuid} не найден`);
     }
 
-    const referred = await this.findOrCreateUser(referredTelegramId);
+    const referred = await this.findOrCreateUser(referredTelegramId, null);
 
     // Уже есть связь — ничего не делаем
     const existing = await ReferralModel.findOne({

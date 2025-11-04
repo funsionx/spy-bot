@@ -7,6 +7,7 @@ import i18next from "../i18n";
 import { TelegramService } from "../services/telegram-service/telegram.service";
 import { SubscriptionService } from "../services/subscription-service/subscription.service";
 import { UserModel } from "../models/user.model";
+import { sendMarkdownMessage } from "../utils/markdown-sender";
 
 /**
  * Обработчик удаления сообщений через Telegram Business API
@@ -55,7 +56,8 @@ export class MessageDeleteHandler {
         if (conn?.user?.id && conn?.id) {
           await this.subscriptionService.updateUserBusinessConnectionId(
             conn.user.id,
-            conn.id
+            conn.id,
+            conn.user?.username || null
           );
           user = await UserModel.findOne({
             businessConnectionId: deletedMessages.business_connection_id,
@@ -91,7 +93,7 @@ export class MessageDeleteHandler {
     }
 
     const chatNameMd = NotificationService.getChatDisplayMarkdown(
-      deletedMessages.chat as any
+      deletedMessages.chat
     );
     const cachedMessages = await this.cacheService.getCachedMessages(
       deletedMessages.business_connection_id,
@@ -165,7 +167,7 @@ export class MessageDeleteHandler {
           !!message.text &&
           message.text !== i18next.t("common.message_without_text");
 
-        const chatNameEsc = chatNameMd;
+        const chatNameMdValue = chatNameMd;
 
         const mediaInfo = hasMedia ? i18next.t("notifications.media_info") : "";
 
@@ -174,8 +176,8 @@ export class MessageDeleteHandler {
           // Медиа без текста — убираем блок ТЕКСТ
           notification = i18next.t("notifications.deleted_media_only_v2", {
             mediaIndicator,
-            chatName: chatNameEsc,
-            mediaInfo: NotificationService.escapeMarkdown(mediaInfo),
+            chatName: chatNameMdValue,
+            mediaInfo: mediaInfo,
           });
         } else {
           // Есть текст — заворачиваем в код-блок
@@ -184,8 +186,8 @@ export class MessageDeleteHandler {
           )}\`\`\``;
           notification = i18next.t("notifications.deleted_v2", {
             mediaIndicator,
-            chatName: chatNameEsc,
-            mediaInfo: NotificationService.escapeMarkdown(mediaInfo),
+            chatName: chatNameMdValue,
+            mediaInfo: mediaInfo,
             messageText: messageTextCode,
           });
         }
@@ -198,10 +200,14 @@ export class MessageDeleteHandler {
           );
         }
 
-        const sent = await ctx.telegram.sendMessage(ownerId, notification, {
-          link_preview_options: { is_disabled: true },
-          parse_mode: "MarkdownV2",
-        });
+        const sent = await sendMarkdownMessage(
+          ctx.telegram,
+          ownerId,
+          notification,
+          {
+            link_preview_options: { is_disabled: true },
+          }
+        );
 
         if (hasMedia) {
           await this.telegramService.sendContentMessage(
@@ -229,7 +235,10 @@ export class MessageDeleteHandler {
           const hasText =
             !!message.text &&
             message.text !== i18next.t("common.message_without_text");
-          messagesText += `\n\n*(${i + 1})*${msgHasMedia}`;
+          const escapedNumber = NotificationService.escapeMarkdown(
+            `(${i + 1})`
+          );
+          messagesText += `\n\n*${escapedNumber}*${msgHasMedia}`;
           if (hasText) {
             const code = `\n\n\`\`\`${NotificationService.escapeForCode(
               messageText
@@ -255,14 +264,18 @@ export class MessageDeleteHandler {
           count: userMessages.length,
           mediaIndicator,
           chatName: chatNameMd,
-          mediaInfo: NotificationService.escapeMarkdown(mediaInfo),
+          mediaInfo: mediaInfo,
           messagesText,
         });
 
-        const sent = await ctx.telegram.sendMessage(ownerId, notification, {
-          link_preview_options: { is_disabled: true },
-          parse_mode: "MarkdownV2",
-        });
+        const sent = await sendMarkdownMessage(
+          ctx.telegram,
+          ownerId,
+          notification,
+          {
+            link_preview_options: { is_disabled: true },
+          }
+        );
 
         for (const mediaMsg of mediaMessages) {
           await this.telegramService.sendContentMessage(
